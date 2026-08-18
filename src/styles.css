@@ -1,0 +1,26 @@
+html,
+body,
+#app,
+.app-root,
+.ant-app {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+html[data-theme='light'] body {
+  background: #eef1f4;
+}
+
+html[data-theme='dark'] body {
+  background: #101418;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+
+* {
+  box-sizing: border-box;
+}

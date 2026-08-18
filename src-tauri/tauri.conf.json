@@ -1,0 +1,90 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Stat Data Viewer",
+  "version": "0.1.0",
+  "identifier": "dev.openclinical.stat-data-viewer",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Stat Data Viewer",
+        "width": 1360,
+        "height": 860,
+        "minWidth": 960,
+        "minHeight": 640
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["dmg", "nsis"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "fileAssociations": [
+      {
+        "ext": ["sas7bdat"],
+        "name": "SAS Dataset",
+        "description": "SAS dataset",
+        "role": "Viewer",
+        "mimeType": "application/x-sas-data"
+      },
+      {
+        "ext": ["xpt"],
+        "name": "SAS Transport",
+        "description": "SAS transport file",
+        "role": "Viewer",
+        "mimeType": "application/x-sas-xport"
+      },
+      {
+        "ext": ["sas7bcat"],
+        "name": "SAS Catalog",
+        "description": "SAS format catalog (metadata only)",
+        "role": "Viewer",
+        "mimeType": "application/x-sas-catalog"
+      },
+      {
+        "ext": ["sav", "zsav"],
+        "name": "SPSS Data",
+        "description": "SPSS data file",
+        "role": "Viewer",
+        "mimeType": "application/x-spss-sav"
+      },
+      {
+        "ext": ["por"],
+        "name": "SPSS Portable",
+        "description": "SPSS portable file",
+        "role": "Viewer",
+        "mimeType": "application/x-spss-por"
+      },
+      {
+        "ext": ["dta"],
+        "name": "Stata Data",
+        "description": "Stata dataset",
+        "role": "Viewer",
+        "mimeType": "application/x-stata-dta"
+      }
+    ],
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
+  }
+}

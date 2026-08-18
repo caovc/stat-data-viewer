@@ -1,0 +1,74 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  publish-tauri:
+    name: ${{ matrix.name }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS Apple Silicon
+            platform: macos-latest
+            rust-targets: aarch64-apple-darwin
+            args: --target aarch64-apple-darwin
+          - name: macOS Intel
+            platform: macos-latest
+            rust-targets: x86_64-apple-darwin
+            args: --target x86_64-apple-darwin
+          - name: Windows x64
+            platform: windows-latest
+            rust-targets: ''
+            args: ''
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Windows LLVM (bindgen)
+        if: runner.os == 'Windows'
+        run: choco install llvm -y --no-progress
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: '. -> target'
+          shared-key: release-${{ matrix.platform }}-${{ matrix.rust-targets || 'host' }}
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LIBCLANG_PATH: ${{ runner.os == 'Windows' && 'C:\\Program Files\\LLVM\\bin' || '' }}
+        with:
+          tagName: v__VERSION__
+          releaseName: 'Stat Data Viewer v__VERSION__'
+          releaseBody: |
+            Read-only desktop viewer for SAS, SPSS and Stata files.
+
+            ## Installers
+            - **Windows**: NSIS `.exe` (current-user install)
+            - **macOS**: `.dmg` for Apple Silicon and Intel
+
+            Builds are unsigned. On macOS, right-click the app and choose Open if Gatekeeper blocks it.
+          releaseDraft: false
+          prerelease: false
+          uploadUpdaterJson: false
+          args: ${{ matrix.args }}

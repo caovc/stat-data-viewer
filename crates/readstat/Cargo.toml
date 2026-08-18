@@ -1,0 +1,16 @@
+[package]
+name = "readstat"
+version = "0.1.0"
+edition = "2021"
+description = "Safe ReadStat wrapper that streams Arrow RecordBatches"
+publish = false
+
+[dependencies]
+arrow = { workspace = true }
+readstat-sys = { path = "../readstat-sys" }
+serde = { workspace = true }
+thiserror = { workspace = true }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+
+[dev-dependencies]
+tempfile = "3"

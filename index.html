@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stat Data Viewer</title>
+    <script>
+      try {
+        var prefs = JSON.parse(localStorage.getItem('stat-data-viewer:preferences') || '{}')
+        var mode = prefs.themeMode || 'system'
+        var dark = mode === 'dark' || (mode !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)
+        var locale = prefs.locale || (navigator.language.toLowerCase().indexOf('zh') === 0 ? 'zh-CN' : 'en-US')
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+        document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+        document.documentElement.lang = locale
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,15 @@
+[package]
+name = "readstat-sys"
+version = "0.1.0"
+edition = "2021"
+description = "Low-level FFI bindings to vendored ReadStat C"
+links = "readstat"
+publish = false
+
+[dependencies]
+libz-sys = { version = "1.1", default-features = false, features = ["libc", "static"] }
+
+[build-dependencies]
+cc = "1.2"
+bindgen = "0.71"
+libz-sys = { version = "1.1", default-features = false, features = ["libc", "static"] }

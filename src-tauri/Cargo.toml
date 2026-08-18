@@ -1,0 +1,31 @@
+[package]
+name = "stat-data-viewer"
+version = "0.1.0"
+description = "Read-only viewer for SAS / SPSS / Stata data files"
+authors = ["open-clinical"]
+edition = "2021"
+default-run = "stat-data-viewer"
+
+[lib]
+name = "stat_data_viewer_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+arrow = { workspace = true }
+readstat = { path = "../crates/readstat" }
+duckdb = { version = "=1.2.2", features = ["bundled", "parquet", "appender-arrow"] }
+rust_xlsxwriter = "0.87"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

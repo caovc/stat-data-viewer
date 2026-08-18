@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Build
+dist/
+target/
+src-tauri/target/
+src-tauri/gen/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Session / local
+*.duckdb
+*.duckdb.wal
+.env
+*.pem
+
+# Generated bindings (kept in OUT_DIR)
+**/*.rs.bk
