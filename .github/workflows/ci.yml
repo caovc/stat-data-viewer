@@ -12,7 +12,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
+        # windows-2022: DuckDB 1.2.2 does not compile on VS 2026 (windows-latest).
+        os: [macos-latest, windows-2022, ubuntu-latest]
     steps:
       - uses: actions/checkout@v4
 
@@ -43,6 +44,7 @@ jobs:
         run: |
           choco install llvm -y --no-progress
           echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> "$env:GITHUB_ENV"
+          echo "CXXFLAGS=/std:c++17 /EHsc" >> "$env:GITHUB_ENV"
 
       - uses: dtolnay/rust-toolchain@1.88.0
 

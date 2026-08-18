@@ -23,8 +23,10 @@ jobs:
             platform: macos-latest
             rust-targets: x86_64-apple-darwin
             args: --target x86_64-apple-darwin
+          # windows-latest is VS 2026 / MSVC 14.51; DuckDB 1.2.2's vendored
+          # fmt still uses removed stdext::checked_array_iterator.
           - name: Windows x64
-            platform: windows-latest
+            platform: windows-2022
             rust-targets: ''
             args: ''
     runs-on: ${{ matrix.platform }}
@@ -43,6 +45,7 @@ jobs:
         run: |
           choco install llvm -y --no-progress
           echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> "$env:GITHUB_ENV"
+          echo "CXXFLAGS=/std:c++17 /EHsc" >> "$env:GITHUB_ENV"
 
       - uses: actions/setup-node@v4
         with:
