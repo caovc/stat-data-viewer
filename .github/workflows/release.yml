@@ -32,9 +32,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install macOS LLVM (bindgen)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm
+          echo "LIBCLANG_PATH=$(brew --prefix llvm)/lib" >> "$GITHUB_ENV"
+
       - name: Install Windows LLVM (bindgen)
         if: runner.os == 'Windows'
-        run: choco install llvm -y --no-progress
+        run: |
+          choco install llvm -y --no-progress
+          echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> "$env:GITHUB_ENV"
 
       - uses: actions/setup-node@v4
         with:
@@ -56,7 +64,6 @@ jobs:
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          LIBCLANG_PATH: ${{ runner.os == 'Windows' && 'C:\\Program Files\\LLVM\\bin' || '' }}
         with:
           tagName: v__VERSION__
           releaseName: 'Stat Data Viewer v__VERSION__'

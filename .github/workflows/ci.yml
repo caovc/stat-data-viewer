@@ -32,9 +32,17 @@ jobs:
             llvm-dev \
             libclang-dev
 
+      - name: Install macOS LLVM (bindgen)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm
+          echo "LIBCLANG_PATH=$(brew --prefix llvm)/lib" >> "$GITHUB_ENV"
+
       - name: Install Windows LLVM (bindgen)
         if: runner.os == 'Windows'
-        run: choco install llvm -y --no-progress
+        run: |
+          choco install llvm -y --no-progress
+          echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> "$env:GITHUB_ENV"
 
       - uses: dtolnay/rust-toolchain@1.88.0
 
@@ -58,6 +66,4 @@ jobs:
           printf '%s\n' '<!doctype html><title>Stat Data Viewer</title>' > dist/index.html
 
       - name: Cargo check workspace
-        env:
-          LIBCLANG_PATH: ${{ runner.os == 'Windows' && 'C:\\Program Files\\LLVM\\bin' || '' }}
         run: cargo check --workspace
