@@ -5,7 +5,9 @@ mod error;
 mod parser;
 mod types;
 
-pub use datetime::{classify_format, format_raw_number, parse_filter_date_to_raw, DateKind};
+pub use datetime::{
+    classify_format, decode_raw_datetime, format_raw_number, parse_filter_date_to_raw, DateKind,
+};
 pub use error::{Error, Result};
 pub use parser::{parse_catalog, parse_file, BatchSink, ParseHooks};
 pub use types::{

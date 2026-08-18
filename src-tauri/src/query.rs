@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
 use arrow::datatypes::DataType;
+use chrono::{Duration, NaiveDate, NaiveTime};
+use duckdb::types::{TimeUnit, ValueRef};
 use duckdb::Connection;
 use readstat::{format_raw_number, parse_filter_date_to_raw, FileFormat, Origin, StorageType};
 use serde::{Deserialize, Serialize};
@@ -561,17 +563,21 @@ fn sql_result_columns(conn: &Connection, rows: &duckdb::Rows<'_>) -> Result<Vec<
         .fields()
         .iter()
         .map(|field| {
+            let (storage_type, duck_datetime) = duck_col_type(field.data_type());
             if let Some(col) = meta.get(field.name()) {
-                return col_out(col);
+                let mut out = col_out(col);
+                if !out.is_datetime && duck_datetime {
+                    out.is_datetime = true;
+                }
+                return out;
             }
-            let (storage_type, is_datetime) = duck_col_type(field.data_type());
             ColumnOut {
                 name: field.name().clone(),
                 label: None,
                 storage_type,
                 display_format: None,
                 origin: "duckdb".into(),
-                is_datetime,
+                is_datetime: duck_datetime,
                 label_set: None,
             }
         })
@@ -642,8 +648,28 @@ fn duck_col_type(dt: &DataType) -> (String, bool) {
     }
 }
 
+fn column_origin(col: &ColumnOut) -> Origin {
+    match col.origin.as_str() {
+        "spss" => Origin::Spss,
+        "stata" => Origin::Stata,
+        _ => Origin::Sas,
+    }
+}
+
 fn sql_cell_for(row: &duckdb::Row<'_>, i: usize, col: &ColumnOut) -> Result<Value, String> {
     if col.is_datetime {
+        if let Some(fmt) = col.display_format.as_deref() {
+            if let Ok(Some(n)) = row.get::<_, Option<f64>>(i) {
+                if let Some(s) = format_raw_number(column_origin(col), fmt, n) {
+                    return Ok(Value::String(s));
+                }
+            }
+        }
+        if let Ok(value) = row.get_ref(i) {
+            if let Some(cell) = native_date_value(value) {
+                return Ok(cell);
+            }
+        }
         if let Ok(v) = row.get::<_, Option<String>>(i) {
             return Ok(v.map(Value::String).unwrap_or(Value::Null));
         }
@@ -675,6 +701,45 @@ fn sql_cell_for(row: &duckdb::Row<'_>, i: usize, col: &ColumnOut) -> Result<Valu
         _ => {}
     }
     sql_cell(row, i)
+}
+
+fn native_date_value(value: ValueRef<'_>) -> Option<Value> {
+    match value {
+        ValueRef::Null => Some(Value::Null),
+        ValueRef::Date32(days) => {
+            let date = NaiveDate::from_ymd_opt(1970, 1, 1)?
+                .checked_add_signed(Duration::days(i64::from(days)))?;
+            Some(Value::String(date.format("%Y-%m-%d").to_string()))
+        }
+        ValueRef::Timestamp(unit, raw) => {
+            let dt = timestamp_naive(unit, raw)?;
+            Some(Value::String(dt.format("%Y-%m-%d %H:%M:%S").to_string()))
+        }
+        ValueRef::Time64(unit, raw) => {
+            let micros = unit.to_micros(raw);
+            let secs = micros.div_euclid(1_000_000);
+            let nsecs = (micros.rem_euclid(1_000_000) * 1000) as u32;
+            let day = 24 * 3600;
+            let secs = ((secs % day) + day) % day;
+            let time = NaiveTime::from_num_seconds_from_midnight_opt(secs as u32, nsecs)?;
+            Some(Value::String(time.format("%H:%M:%S").to_string()))
+        }
+        ValueRef::Text(bytes) => {
+            let text = std::str::from_utf8(bytes).ok()?.trim();
+            if text.is_empty() {
+                return Some(Value::Null);
+            }
+            Some(Value::String(text.to_string()))
+        }
+        _ => None,
+    }
+}
+
+fn timestamp_naive(unit: TimeUnit, raw: i64) -> Option<chrono::NaiveDateTime> {
+    let micros = unit.to_micros(raw);
+    let secs = micros.div_euclid(1_000_000);
+    let nsecs = (micros.rem_euclid(1_000_000) * 1000) as u32;
+    chrono::DateTime::from_timestamp(secs, nsecs).map(|d| d.naive_utc())
 }
 
 fn number_to_filter_value(n: f64) -> String {
@@ -844,6 +909,7 @@ mod tests {
                 ("dt", "float64", true),
             ]
         );
+        assert_eq!(page.rows[0][3], Value::String("2020-01-01".into()));
     }
 
     #[test]
@@ -854,7 +920,7 @@ mod tests {
             conn.execute_batch(
                 "CREATE TABLE ads (visit DOUBLE, name VARCHAR);
                  INSERT INTO ads VALUES (21915, 'a');
-                 INSERT INTO meta_datasets VALUES ('ads', '/tmp/ads.sav', 0, 'sav', NULL, NULL, NULL, NULL, 1, 2, NULL, true);
+                 INSERT INTO meta_datasets VALUES ('ads', '/tmp/ads.sas7bdat', 0, 'sas7bdat', NULL, NULL, NULL, NULL, 1, 2, NULL, true);
                  INSERT INTO meta_variables VALUES ('ads', 0, 'visit', 'Visit date', 'float64', 'DATE9.', NULL, NULL, NULL, '[]', NULL);
                  INSERT INTO meta_variables VALUES ('ads', 1, 'name', 'Subject', 'string', NULL, NULL, NULL, NULL, '[]', NULL);",
             )
@@ -865,6 +931,7 @@ mod tests {
         assert_eq!(page.columns[0].storage_type, "float64");
         assert!(page.columns[0].is_datetime, "imported date format should stay datetime");
         assert_eq!(page.columns[0].label.as_deref(), Some("Visit date"));
+        assert_eq!(page.rows[0][0], Value::String("2020-01-01".into()));
         assert_eq!(page.columns[1].storage_type, "string");
         assert_eq!(page.columns[1].label.as_deref(), Some("Subject"));
     }

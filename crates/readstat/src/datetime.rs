@@ -109,6 +109,45 @@ fn classify_stata(fmt: &str) -> Option<DateKind> {
     None
 }
 
+pub fn decode_raw_datetime(origin: Origin, format: &str, value: f64) -> Option<(DateKind, NaiveDateTime)> {
+    if !value.is_finite() {
+        return None;
+    }
+    let kind = classify_format(origin, format)?;
+    let dt = match (origin, kind) {
+        (Origin::Sas | Origin::Stata, DateKind::Date) => {
+            let days = value.round() as i64;
+            SAS_EPOCH
+                .checked_add_signed(Duration::days(days))?
+                .and_hms_opt(0, 0, 0)?
+        }
+        (Origin::Sas, DateKind::DateTime) => {
+            let millis = (value * 1000.0).round() as i64;
+            SAS_EPOCH
+                .and_hms_opt(0, 0, 0)?
+                .checked_add_signed(Duration::milliseconds(millis))?
+        }
+        (Origin::Stata, DateKind::DateTime) => {
+            let millis = value.round() as i64;
+            SAS_EPOCH
+                .and_hms_opt(0, 0, 0)?
+                .checked_add_signed(Duration::milliseconds(millis))?
+        }
+        (Origin::Spss, DateKind::Date | DateKind::DateTime) => {
+            let millis = (value * 1000.0).round() as i64;
+            SPSS_EPOCH.checked_add_signed(Duration::milliseconds(millis))?
+        }
+        (_, DateKind::Time) => {
+            let secs = value.round() as i64;
+            let day = 24 * 3600;
+            let secs = ((secs % day) + day) % day;
+            let time = NaiveTime::from_num_seconds_from_midnight_opt(secs as u32, 0)?;
+            NaiveDate::from_ymd_opt(1970, 1, 1)?.and_time(time)
+        }
+    };
+    Some((kind, dt))
+}
+
 pub fn format_raw_number(origin: Origin, format: &str, value: f64) -> Option<String> {
     if !value.is_finite() {
         return None;
@@ -254,5 +293,12 @@ mod tests {
             format_raw_number(Origin::Sas, "DATE9.", raw).unwrap(),
             "2020-01-15"
         );
+    }
+
+    #[test]
+    fn decode_sas_date_2020() {
+        let (kind, dt) = decode_raw_datetime(Origin::Sas, "DATE9.", 21915.0).unwrap();
+        assert_eq!(kind, DateKind::Date);
+        assert_eq!(dt.date(), NaiveDate::from_ymd_opt(2020, 1, 1).unwrap());
     }
 }
