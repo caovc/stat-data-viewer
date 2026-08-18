@@ -78,7 +78,7 @@ If strings or labels are garbled, or the file has no reliable extension:
 
 `ReadStat C (vendored)` → `readstat-sys` (bindgen) → `readstat` (Arrow batches) → DuckDB session file → Tauri commands (JSON pages) → Vue 3 grid.
 
-Locked crate pair: **duckdb 1.2.2** + **arrow 54**. Do not mix with duckdb 1.105xx (Arrow 58, higher MSRV).
+Locked crate pair: **duckdb 1.10505.0** (DuckDB 1.5.5) + **arrow 58**.
 
 Data tables store **raw values**. Labels live in `meta_variables` / `meta_value_labels`. Dates are formatted in Rust using SAS (1960-01-01), Stata and SPSS epochs.
 

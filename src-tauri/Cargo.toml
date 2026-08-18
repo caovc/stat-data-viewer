@@ -21,7 +21,7 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 arrow = { workspace = true }
 readstat = { path = "../crates/readstat" }
-duckdb = { version = "=1.2.2", features = ["bundled", "parquet", "appender-arrow"] }
+duckdb = { version = "~1.10505.0", features = ["bundled", "parquet", "appender-arrow"] }
 rust_xlsxwriter = "0.87"
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }

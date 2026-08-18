@@ -12,8 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # windows-2022: DuckDB 1.2.2 does not compile on VS 2026 (windows-latest).
-        os: [macos-latest, windows-2022, ubuntu-latest]
+        os: [macos-latest, windows-latest, ubuntu-latest]
     steps:
       - uses: actions/checkout@v4
 

@@ -540,6 +540,17 @@ pub fn run_sql_page(
     })
 }
 
+pub(crate) fn describe_sql_columns(conn: &Connection, sql: &str) -> Result<Vec<ColumnOut>, String> {
+    let inner = strip_trailing_semicolon(sql);
+    if inner.is_empty() {
+        return Err("empty SQL".into());
+    }
+    let data_sql = format!("SELECT * FROM ({inner}) AS _sdv_q LIMIT 0");
+    let mut stmt = conn.prepare(&data_sql).map_err(|e| e.to_string())?;
+    let rows = stmt.query([]).map_err(|e| e.to_string())?;
+    sql_result_columns(conn, &rows)
+}
+
 fn sql_result_columns(conn: &Connection, rows: &duckdb::Rows<'_>) -> Result<Vec<ColumnOut>, String> {
     let stmt = rows
         .as_ref()
@@ -617,7 +628,10 @@ fn duck_col_type(dt: &DataType) -> (String, bool) {
         | DataType::UInt32 => ("int32".into(), false),
         DataType::Int64 | DataType::UInt64 => ("int64".into(), false),
         DataType::Float16 | DataType::Float32 | DataType::Float64 => ("float64".into(), false),
-        DataType::Decimal128(_, _) | DataType::Decimal256(_, _) => ("float64".into(), false),
+        DataType::Decimal32(_, _)
+        | DataType::Decimal64(_, _)
+        | DataType::Decimal128(_, _)
+        | DataType::Decimal256(_, _) => ("float64".into(), false),
         DataType::Date32
         | DataType::Date64
         | DataType::Time32(_)

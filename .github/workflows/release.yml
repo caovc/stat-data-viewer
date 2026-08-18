@@ -23,10 +23,8 @@ jobs:
             platform: macos-latest
             rust-targets: x86_64-apple-darwin
             args: --target x86_64-apple-darwin
-          # windows-latest is VS 2026 / MSVC 14.51; DuckDB 1.2.2's vendored
-          # fmt still uses removed stdext::checked_array_iterator.
           - name: Windows x64
-            platform: windows-2022
+            platform: windows-latest
             rust-targets: ''
             args: ''
     runs-on: ${{ matrix.platform }}

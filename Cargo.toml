@@ -8,7 +8,7 @@ license = "MIT"
 repository = "https://github.com/caovc/stat-data-viewer"
 
 [workspace.dependencies]
-arrow = "54"
+arrow = "58"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
