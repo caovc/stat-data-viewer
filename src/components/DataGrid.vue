@@ -30,7 +30,7 @@ import { GRID_ROW_HEIGHT, virtualRowPads } from '../utils/virtualTable'
 const { t } = useI18n()
 const { token } = theme.useToken()
 const store = useWorkspace()
-const { page, metadata, labelMode, headerMode, sorts, offset, hidden, pinnedStart, pinnedEnd, columnWidths, filters, dataTab } = storeToRefs(store)
+const { page, metadata, metadataByTable, labelMode, headerMode, sorts, offset, hidden, pinnedStart, pinnedEnd, columnWidths, filters, dataTab } = storeToRefs(store)
 
 const scroller = useTemplateRef<HTMLElement>('scroller')
 const filterCol = shallowRef<string | null>(null)
@@ -39,9 +39,14 @@ const skipSort = shallowRef(false)
 
 const labels = computed(() => {
   const map = new Map<string, string>()
-  for (const item of (metadata.value?.valueLabels ?? []) as ValueLabel[]) {
-    if (item.numValue != null) map.set(`${item.labelSet}#n#${item.numValue}`, item.label)
-    if (item.strValue != null) map.set(`${item.labelSet}#s#${item.strValue}`, item.label)
+  const sources = metadata.value
+    ? [metadata.value]
+    : Object.values(metadataByTable.value)
+  for (const meta of sources) {
+    for (const item of meta.valueLabels as ValueLabel[]) {
+      if (item.numValue != null) map.set(`${item.labelSet}#n#${item.numValue}`, item.label)
+      if (item.strValue != null) map.set(`${item.labelSet}#s#${item.strValue}`, item.label)
+    }
   }
   return map
 })
@@ -213,7 +218,7 @@ const sortByName = computed(() => {
 })
 
 async function onHeader(name: string, event: MouseEvent) {
-  if (name === '_row' || skipSort.value || resizingId.value) return
+  if (!dataTab.value || name === '_row' || skipSort.value || resizingId.value) return
   await store.applySort(name, event.shiftKey)
 }
 
@@ -302,11 +307,12 @@ function onFilterOpen(column: string, open: boolean) {
             <th
               v-for="header in group.headers"
               :key="header.id"
-              :class="[
+                :class="[
                 pinClass(header.id),
                 {
                   num: header.id !== '_row' && colByName.get(header.id)?.storageType !== 'string',
                   resizing: resizingId === header.id,
+                  sortable: Boolean(dataTab) && header.id !== '_row',
                 },
               ]"
               :style="pinStyle(header.id)"
@@ -331,6 +337,7 @@ function onFilterOpen(column: string, open: boolean) {
                     <span v-if="(sortByName.get(header.id)?.total ?? 0) > 1" class="sort-ord">{{ (sortByName.get(header.id)?.index ?? 0) + 1 }}</span>
                   </span>
                   <Popover
+                    v-if="dataTab"
                     trigger="click"
                     :open="filterCol === header.id"
                     @open-change="onFilterOpen(header.id, $event)"
@@ -480,9 +487,12 @@ function onFilterOpen(column: string, open: boolean) {
   z-index: 1;
   font-weight: 600;
   text-align: left;
-  cursor: pointer;
   user-select: none;
   background-image: linear-gradient(v-bind('token.colorFillAlter'), v-bind('token.colorFillAlter'));
+}
+
+.grid-table th.sortable {
+  cursor: pointer;
 }
 
 .grid-table th.resizing {

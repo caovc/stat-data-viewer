@@ -4,25 +4,18 @@ import { useI18n } from 'vue-i18n'
 import {
   CodeOutlined,
   DatabaseOutlined,
-  ExportOutlined,
   FolderOpenOutlined,
-  ReloadOutlined,
-  FilterOutlined,
-  TableOutlined,
 } from '@antdv-next/icons'
-import { Badge, Button, Divider, Flex, Segmented, Space, Tooltip, TypographyText, theme } from 'antdv-next'
+import { Button, Divider, Flex, Segmented, Space, Tooltip, TypographyText, theme } from 'antdv-next'
 import { storeToRefs } from 'pinia'
 import LocaleSwitch from './header/LocaleSwitch.vue'
 import ThemeSwitch from './header/ThemeSwitch.vue'
 import { useWorkspaceActions } from '../composables/useWorkspaceActions'
-import { filterCount } from '../utils/queryRules'
 
 const { t } = useI18n()
 const { token } = theme.useToken()
 const { store, openFiles } = useWorkspaceActions()
-const { dataTab, page, metadata, showSql, showQuery, headerMode, labelMode, sorts, filters } = storeToRefs(store)
-
-const queryCount = computed(() => sorts.value.length + filterCount(filters.value))
+const { page, metadata, showSql, headerMode, labelMode } = storeToRefs(store)
 
 const headerOptions = computed(() => [
   { label: t('header.colName'), value: 'name' },
@@ -64,34 +57,10 @@ const hasValueLabels = computed(() => (metadata.value?.valueLabels.length ?? 0) 
         <template #icon><FolderOpenOutlined /></template>
         {{ t('header.open') }}
       </Button>
-      <Button :disabled="!dataTab" @click="store.showReimport = true">
-        <template #icon><ReloadOutlined /></template>
-        {{ t('header.reimport') }}
-      </Button>
-      <Button :disabled="!page" @click="store.showExport = true">
-        <template #icon><ExportOutlined /></template>
-        {{ t('header.export') }}
-      </Button>
       <Button :type="showSql ? 'primary' : 'default'" @click="store.showSql = !store.showSql">
         <template #icon><CodeOutlined /></template>
         {{ t('header.sql') }}
       </Button>
-      <Button @click="store.showColumns = !store.showColumns">
-        <template #icon><TableOutlined /></template>
-        {{ t('header.columns') }}
-      </Button>
-      <Tooltip :title="t('header.queryHint')">
-        <Badge :count="queryCount" :offset="[-2, 2]">
-          <Button
-            :disabled="!dataTab"
-            :type="showQuery ? 'primary' : 'default'"
-            @click="store.showQuery = !store.showQuery"
-          >
-            <template #icon><FilterOutlined /></template>
-            {{ t('header.query') }}
-          </Button>
-        </Badge>
-      </Tooltip>
       <Divider type="vertical" />
       <Tooltip :title="t('header.colModeHint')">
         <span>

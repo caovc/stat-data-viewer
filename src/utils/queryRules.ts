@@ -130,6 +130,20 @@ export function pruneFilterGroup(group: FilterGroup): FilterGroup {
   return { type: 'group', combinator: group.combinator, children }
 }
 
+export function pruneFiltersToColumns(group: FilterGroup, names: Iterable<string>): FilterGroup {
+  const known = names instanceof Set ? names : new Set(names)
+  const children: FilterNode[] = []
+  for (const child of group.children) {
+    if (child.type === 'condition') {
+      if (known.has(child.column)) children.push(child)
+      continue
+    }
+    const next = pruneFiltersToColumns(child, known)
+    if (next.children.length > 0) children.push(next)
+  }
+  return pruneFilterGroup({ type: 'group', combinator: group.combinator, children })
+}
+
 export function toFilterGroup(draft: FilterGroupDraft): FilterGroup {
   return pruneFilterGroup(stripNode(draft) as FilterGroup)
 }

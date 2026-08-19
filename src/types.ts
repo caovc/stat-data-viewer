@@ -124,6 +124,18 @@ export interface ImportEvent {
   error: string | null
 }
 
+export interface TabView {
+  sorts: SortSpec[]
+  filters: FilterGroup
+  hidden: string[]
+  columnOrder: string[]
+  pinnedStart: string[]
+  pinnedEnd: string[]
+  columnWidths: Record<string, number>
+  offset: number
+  pageSize: number
+}
+
 export interface DataTab {
   id: string
   kind: 'data'
@@ -134,6 +146,7 @@ export interface DataTab {
   importing: boolean
   progress: number
   error: string | null
+  view: TabView
 }
 
 export interface SqlTab {
@@ -141,6 +154,7 @@ export interface SqlTab {
   kind: 'sql'
   title: string
   sql: string
+  view: TabView
 }
 
 export type WorkspaceTab = DataTab | SqlTab

@@ -27,7 +27,7 @@ import {
 
 const { t } = useI18n()
 const store = useWorkspace()
-const { metadata, page, sorts, filters, showQuery, dataTab } = storeToRefs(store)
+const { metadata, page, sorts, filters, showQuery, dataTab, activeId } = storeToRefs(store)
 
 const draftSorts = ref<SortDraft[]>([])
 const draftFilters = ref<FilterGroupDraft>(emptyFilterDraft())
@@ -54,7 +54,7 @@ function loadDrafts() {
   draftFilters.value = cloneFilterTree(filters.value)
 }
 
-watch(showQuery, (open) => {
+watch([showQuery, activeId], ([open]) => {
   if (open) loadDrafts()
 })
 

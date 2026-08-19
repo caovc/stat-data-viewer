@@ -15,6 +15,7 @@ import type {
   PageResult,
   SortSpec,
   SqlTab,
+  TabView,
   WorkspaceTab,
 } from '../types'
 import {
@@ -23,31 +24,37 @@ import {
   moveItem,
   nextPinList,
 } from '../utils/columnLayout'
-import { emptyFilterGroup, pruneFilterGroup } from '../utils/queryRules'
+import { emptyFilterGroup, pruneFilterGroup, pruneFiltersToColumns } from '../utils/queryRules'
 
 let unlisten: UnlistenFn | null = null
 let idSeq = 1
+
+const DEFAULT_PAGE_SIZE = 300
+
+export function createTabView(): TabView {
+  return {
+    sorts: [],
+    filters: emptyFilterGroup(),
+    hidden: [],
+    columnOrder: [],
+    pinnedStart: [],
+    pinnedEnd: [],
+    columnWidths: {},
+    offset: 0,
+    pageSize: DEFAULT_PAGE_SIZE,
+  }
+}
 
 export const useWorkspace = defineStore('workspace', () => {
   const tabs = ref<WorkspaceTab[]>([])
   const activeId = ref<string | null>(null)
   const labelMode = ref<LabelMode>('value')
   const headerMode = ref<HeaderMode>('name')
-  const metadata = shallowRef<DatasetMeta | null>(null)
   const metadataByTable = shallowRef<Record<string, DatasetMeta>>({})
-  const page = shallowRef<PageResult | null>(null)
+  const pageById = shallowRef<Record<string, PageResult>>({})
   const loading = ref(false)
   const error = ref<string | null>(null)
-  const sorts = ref<SortSpec[]>([])
-  const filters = ref<FilterGroup>(emptyFilterGroup())
-  const hidden = ref<string[]>([])
-  const columnOrder = ref<string[]>([])
-  const pinnedStart = ref<string[]>([])
-  const pinnedEnd = ref<string[]>([])
-  const columnWidths = ref<Record<string, number>>({})
-  const offset = ref(0)
-  const pageSize = ref(300)
-  const sqlDraft = ref('SELECT * FROM ')
+  const fallbackSql = ref('SELECT * FROM ')
   const showSql = ref(false)
   const showReimport = ref(false)
   const showExport = ref(false)
@@ -58,9 +65,83 @@ export const useWorkspace = defineStore('workspace', () => {
   const active = computed(() => tabs.value.find((t) => t.id === activeId.value) ?? null)
   const dataTab = computed(() => (active.value?.kind === 'data' ? active.value : null))
   const sqlCatalog = computed(() => buildSqlCatalog(tabs.value, metadataByTable.value))
+  const page = computed(() => (activeId.value ? pageById.value[activeId.value] ?? null : null))
+  const metadata = computed(() => {
+    const tab = dataTab.value
+    return tab ? metadataByTable.value[tab.tableName] ?? null : null
+  })
+
+  const sorts = computed({
+    get: () => active.value?.view.sorts ?? [],
+    set: (next) => {
+      if (active.value) active.value.view.sorts = next
+    },
+  })
+  const filters = computed({
+    get: () => active.value?.view.filters ?? emptyFilterGroup(),
+    set: (next) => {
+      if (active.value) active.value.view.filters = next
+    },
+  })
+  const hidden = computed({
+    get: () => active.value?.view.hidden ?? [],
+    set: (next) => {
+      if (active.value) active.value.view.hidden = next
+    },
+  })
+  const columnOrder = computed({
+    get: () => active.value?.view.columnOrder ?? [],
+    set: (next) => {
+      if (active.value) active.value.view.columnOrder = next
+    },
+  })
+  const pinnedStart = computed({
+    get: () => active.value?.view.pinnedStart ?? [],
+    set: (next) => {
+      if (active.value) active.value.view.pinnedStart = next
+    },
+  })
+  const pinnedEnd = computed({
+    get: () => active.value?.view.pinnedEnd ?? [],
+    set: (next) => {
+      if (active.value) active.value.view.pinnedEnd = next
+    },
+  })
+  const columnWidths = computed({
+    get: () => active.value?.view.columnWidths ?? {},
+    set: (next) => {
+      if (active.value) active.value.view.columnWidths = next
+    },
+  })
+  const offset = computed({
+    get: () => active.value?.view.offset ?? 0,
+    set: (next) => {
+      if (active.value) active.value.view.offset = next
+    },
+  })
+  const pageSize = computed({
+    get: () => active.value?.view.pageSize ?? DEFAULT_PAGE_SIZE,
+    set: (next) => {
+      if (active.value) active.value.view.pageSize = next
+    },
+  })
+  const sqlDraft = computed({
+    get: () => (active.value?.kind === 'sql' ? active.value.sql : fallbackSql.value),
+    set: (next) => {
+      if (active.value?.kind === 'sql') active.value.sql = next
+      else fallbackSql.value = next
+    },
+  })
 
   function rememberMeta(meta: DatasetMeta) {
     metadataByTable.value = { ...metadataByTable.value, [meta.tableName]: meta }
+  }
+
+  function setPage(id: string, next: PageResult | null) {
+    const pages = { ...pageById.value }
+    if (next) pages[id] = next
+    else delete pages[id]
+    pageById.value = pages
   }
 
   function addTab(tab: WorkspaceTab) {
@@ -69,28 +150,35 @@ export const useWorkspace = defineStore('workspace', () => {
   }
 
   async function activate(id: string) {
+    if (activeId.value !== id) {
+      showReimport.value = false
+      showExport.value = false
+    }
     activeId.value = id
     const tab = tabs.value.find((t) => t.id === id)
-    if (tab?.kind === 'data') {
-      offset.value = 0
-      sorts.value = []
-      filters.value = emptyFilterGroup()
-      resetColumnLayoutState()
-      await refresh()
-    } else if (tab?.kind === 'sql') {
-      sqlDraft.value = tab.sql
+    if (tab?.kind !== 'data') {
+      showQuery.value = false
+      return
     }
+    await refresh({ silent: Boolean(pageById.value[id]) })
   }
 
   function closeTab(id: string) {
     const idx = tabs.value.findIndex((t) => t.id === id)
     if (idx < 0) return
     tabs.value.splice(idx, 1)
-    if (activeId.value === id) {
-      const next = tabs.value[idx] ?? tabs.value[idx - 1] ?? null
-      activeId.value = next?.id ?? null
-      if (next?.kind === 'data') void refresh()
+    setPage(id, null)
+    if (activeId.value !== id) return
+    showReimport.value = false
+    showExport.value = false
+    const next = tabs.value[idx] ?? tabs.value[idx - 1] ?? null
+    activeId.value = next?.id ?? null
+    if (!next) {
+      showColumns.value = false
+      showQuery.value = false
+      return
     }
+    void activate(next.id)
   }
 
   async function openPath(path: string, extra?: { encoding?: string; format?: string; catalogPath?: string }) {
@@ -115,36 +203,58 @@ export const useWorkspace = defineStore('workspace', () => {
         importing: !result.reused && !result.importComplete,
         progress: result.reused ? 1 : 0,
         error: null,
+        view: createTabView(),
       })
     }
     await refresh()
   }
 
-  async function refresh() {
-    const tab = dataTab.value
-    if (!tab) {
-      metadata.value = null
-      page.value = null
-      return
-    }
-    loading.value = true
+  async function refresh(opts?: { silent?: boolean }) {
+    const tab = active.value
+    if (!tab) return
+    if (tab.kind === 'data') await refreshData(tab, opts)
+    else if (pageById.value[tab.id]) await refreshSql(tab, opts)
+  }
+
+  async function refreshData(tab: DataTab, opts?: { silent?: boolean }) {
+    const silent = opts?.silent ?? false
+    if (!silent) loading.value = true
     error.value = null
     try {
-      metadata.value = await api.getMetadata(tab.tableName)
-      rememberMeta(metadata.value)
-      syncColumnOrder(metadata.value.variables.map((item) => item.name))
-      page.value = await api.queryPage({
+      const meta = await api.getMetadata(tab.tableName)
+      rememberMeta(meta)
+      syncColumnOrder(meta.variables.map((item) => item.name))
+      setPage(tab.id, await api.queryPage({
         table: tab.tableName,
-        offset: offset.value,
-        pageSize: pageSize.value,
-        sorts: sorts.value,
-        filters: filters.value,
-        hidden: hidden.value,
-      })
+        offset: tab.view.offset,
+        pageSize: tab.view.pageSize,
+        sorts: tab.view.sorts,
+        filters: tab.view.filters,
+        hidden: tab.view.hidden,
+      }))
     } catch (e) {
       error.value = String(e)
     } finally {
-      loading.value = false
+      if (!silent) loading.value = false
+    }
+  }
+
+  async function refreshSql(tab: SqlTab, opts?: { silent?: boolean }) {
+    const silent = opts?.silent ?? false
+    if (!silent) loading.value = true
+    error.value = null
+    try {
+      const result = await api.runSql({
+        sql: tab.sql,
+        offset: tab.view.offset,
+        pageSize: tab.view.pageSize,
+      })
+      setPage(tab.id, result)
+      syncColumnOrder(result.columns.map((item) => item.name))
+    } catch (e) {
+      error.value = String(e)
+    } finally {
+      if (!silent) loading.value = false
     }
   }
 
@@ -153,18 +263,25 @@ export const useWorkspace = defineStore('workspace', () => {
     loading.value = true
     error.value = null
     try {
-      const result = await api.runSql({ sql, offset: offset.value, pageSize: pageSize.value })
-      page.value = result
       const current = active.value
-      if (current?.kind === 'sql') current.sql = sql
-      else {
-        addTab({
-          id: `s${idSeq++}`,
-          kind: 'sql',
-          title: 'SQL result',
-          sql,
-        })
-      }
+      const tab = current?.kind === 'sql'
+        ? current
+        : (() => {
+            const next: SqlTab = {
+              id: `s${idSeq++}`,
+              kind: 'sql',
+              title: 'SQL result',
+              sql,
+              view: createTabView(),
+            }
+            addTab(next)
+            return next
+          })()
+      tab.sql = sql
+      tab.view.offset = 0
+      const result = await api.runSql({ sql, offset: 0, pageSize: tab.view.pageSize })
+      setPage(tab.id, result)
+      syncColumnOrder(result.columns.map((item) => item.name))
     } catch (e) {
       error.value = String(e)
     } finally {
@@ -172,79 +289,90 @@ export const useWorkspace = defineStore('workspace', () => {
     }
   }
 
+  function uniqueSorts(next: SortSpec[]) {
+    const seen = new Set<string>()
+    return next.filter((item) => {
+      if (!item.column || seen.has(item.column)) return false
+      seen.add(item.column)
+      return true
+    })
+  }
+
   async function applySort(column: string, append = false) {
-    if (!dataTab.value) return
+    const view = dataTab.value?.view
+    if (!view) return
     if (append) {
-      const index = sorts.value.findIndex((item) => item.column === column)
+      const index = view.sorts.findIndex((item) => item.column === column)
       if (index < 0) {
-        sorts.value = [...sorts.value, { column, desc: false }]
-      } else if (!sorts.value[index].desc) {
-        sorts.value = sorts.value.map((item, i) => (i === index ? { column, desc: true } : item))
+        view.sorts = [...view.sorts, { column, desc: false }]
+      } else if (!view.sorts[index].desc) {
+        view.sorts = view.sorts.map((item, i) => (i === index ? { column, desc: true } : item))
       } else {
-        sorts.value = sorts.value.filter((_, i) => i !== index)
+        view.sorts = view.sorts.filter((_, i) => i !== index)
       }
-    } else if (sorts.value.length === 1 && sorts.value[0].column === column) {
-      sorts.value = sorts.value[0].desc ? [] : [{ column, desc: true }]
+    } else if (view.sorts.length === 1 && view.sorts[0].column === column) {
+      view.sorts = view.sorts[0].desc ? [] : [{ column, desc: true }]
     } else {
-      sorts.value = [{ column, desc: false }]
+      view.sorts = [{ column, desc: false }]
     }
-    offset.value = 0
+    view.offset = 0
     await refresh()
   }
 
   async function applySorts(next: SortSpec[]) {
-    if (!dataTab.value) return
-    const seen = new Set<string>()
-    sorts.value = next.filter((item) => {
-      if (!item.column || seen.has(item.column)) return false
-      seen.add(item.column)
-      return true
-    })
-    offset.value = 0
+    const view = dataTab.value?.view
+    if (!view) return
+    view.sorts = uniqueSorts(next)
+    view.offset = 0
     await refresh()
   }
 
   async function applyFilters(next: FilterGroup) {
-    if (!dataTab.value) return
-    filters.value = pruneFilterGroup(next)
-    offset.value = 0
+    const view = dataTab.value?.view
+    if (!view) return
+    view.filters = pruneFilterGroup(next)
+    view.offset = 0
     await refresh()
   }
 
   async function applyQuery(nextSorts: SortSpec[], nextFilters: FilterGroup) {
-    if (!dataTab.value) return
-    const seen = new Set<string>()
-    sorts.value = nextSorts.filter((item) => {
-      if (!item.column || seen.has(item.column)) return false
-      seen.add(item.column)
-      return true
-    })
-    filters.value = pruneFilterGroup(nextFilters)
-    offset.value = 0
+    const view = dataTab.value?.view
+    if (!view) return
+    view.sorts = uniqueSorts(nextSorts)
+    view.filters = pruneFilterGroup(nextFilters)
+    view.offset = 0
     await refresh()
   }
 
   async function toggleHidden(name: string) {
-    hidden.value = hidden.value.includes(name)
-      ? hidden.value.filter((n) => n !== name)
-      : [...hidden.value, name]
-    await refresh()
+    const view = active.value?.view
+    if (!view) return
+    view.hidden = view.hidden.includes(name)
+      ? view.hidden.filter((n) => n !== name)
+      : [...view.hidden, name]
+    if (dataTab.value) await refresh()
   }
 
   async function setOffset(next: number) {
-    offset.value = Math.max(0, next)
+    const view = active.value?.view
+    if (!view) return
+    view.offset = Math.max(0, next)
     await refresh()
   }
 
   async function setPageSize(next: number) {
-    pageSize.value = next
-    offset.value = 0
+    const view = active.value?.view
+    if (!view) return
+    view.pageSize = next
+    view.offset = 0
     await refresh()
   }
 
   async function setHidden(names: string[]) {
-    hidden.value = names
-    await refresh()
+    const view = active.value?.view
+    if (!view) return
+    view.hidden = names
+    if (dataTab.value) await refresh()
   }
 
   function sourceColumnNames() {
@@ -252,61 +380,73 @@ export const useWorkspace = defineStore('workspace', () => {
   }
 
   function syncColumnOrder(names: string[]) {
-    columnOrder.value = mergeColumnOrder(columnOrder.value, names)
+    const view = active.value?.view
+    if (!view) return
+    view.columnOrder = mergeColumnOrder(view.columnOrder, names)
     const known = new Set(names)
-    pinnedStart.value = pinnedStart.value.filter((name) => known.has(name))
-    pinnedEnd.value = pinnedEnd.value.filter((name) => known.has(name))
-    hidden.value = hidden.value.filter((name) => known.has(name))
+    view.pinnedStart = view.pinnedStart.filter((name) => known.has(name))
+    view.pinnedEnd = view.pinnedEnd.filter((name) => known.has(name))
+    view.hidden = view.hidden.filter((name) => known.has(name))
+    view.sorts = view.sorts.filter((item) => known.has(item.column))
+    view.filters = pruneFiltersToColumns(view.filters, known)
   }
 
   function resetColumnLayoutState() {
-    columnOrder.value = []
-    pinnedStart.value = []
-    pinnedEnd.value = []
-    hidden.value = []
-    columnWidths.value = {}
+    const view = active.value?.view
+    if (!view) return
+    view.columnOrder = []
+    view.pinnedStart = []
+    view.pinnedEnd = []
+    view.hidden = []
+    view.columnWidths = {}
   }
 
   function setColumnWidths(next: Record<string, number>) {
-    columnWidths.value = next
+    const view = active.value?.view
+    if (view) view.columnWidths = next
   }
 
   function orderedColumnNames() {
-    const names = mergeColumnOrder(columnOrder.value, sourceColumnNames())
-    return displayColumnNames(names, pinnedStart.value, pinnedEnd.value)
+    const view = active.value?.view
+    const names = mergeColumnOrder(view?.columnOrder ?? [], sourceColumnNames())
+    return displayColumnNames(names, view?.pinnedStart ?? [], view?.pinnedEnd ?? [])
   }
 
   function reorderColumns(fromName: string, toName: string) {
-    if (fromName === toName) return
+    const view = active.value?.view
+    if (!view || fromName === toName) return
     const names = orderedColumnNames()
     const from = names.indexOf(fromName)
     const to = names.indexOf(toName)
     if (from < 0 || to < 0) return
     const next = moveItem(names, from, to)
-    const startSet = new Set(pinnedStart.value)
-    const endSet = new Set(pinnedEnd.value)
+    const startSet = new Set(view.pinnedStart)
+    const endSet = new Set(view.pinnedEnd)
     if (startSet.has(fromName) && startSet.has(toName)) {
-      pinnedStart.value = next.filter((name) => startSet.has(name))
+      view.pinnedStart = next.filter((name) => startSet.has(name))
       return
     }
     if (endSet.has(fromName) && endSet.has(toName)) {
-      pinnedEnd.value = next.filter((name) => endSet.has(name))
+      view.pinnedEnd = next.filter((name) => endSet.has(name))
       return
     }
     if (!startSet.has(fromName) && !endSet.has(fromName) && !startSet.has(toName) && !endSet.has(toName)) {
-      columnOrder.value = next.filter((name) => !startSet.has(name) && !endSet.has(name))
+      view.columnOrder = next.filter((name) => !startSet.has(name) && !endSet.has(name))
     }
   }
 
   function pinColumn(name: string, pin: ColumnPin) {
-    const next = nextPinList(name, pin, pinnedStart.value, pinnedEnd.value)
-    pinnedStart.value = next.pinnedStart
-    pinnedEnd.value = next.pinnedEnd
+    const view = active.value?.view
+    if (!view) return
+    const next = nextPinList(name, pin, view.pinnedStart, view.pinnedEnd)
+    view.pinnedStart = next.pinnedStart
+    view.pinnedEnd = next.pinnedEnd
   }
 
   async function resetColumnLayout() {
     resetColumnLayoutState()
     if (metadata.value) syncColumnOrder(metadata.value.variables.map((item) => item.name))
+    else if (page.value) syncColumnOrder(page.value.columns.map((item) => item.name))
     await refresh()
   }
 
@@ -343,7 +483,7 @@ export const useWorkspace = defineStore('workspace', () => {
       tab.error = payload.error
       if (payload.error) error.value = payload.error
       if (payload.previewReady || payload.complete) {
-        if (activeId.value === tab.id) await refresh()
+        if (activeId.value === tab.id) await refresh({ silent: Boolean(pageById.value[tab.id]) })
       }
     })
   }
@@ -356,8 +496,10 @@ export const useWorkspace = defineStore('workspace', () => {
     labelMode,
     headerMode,
     metadata,
+    metadataByTable,
     sqlCatalog,
     page,
+    pageById,
     loading,
     error,
     sorts,
@@ -401,5 +543,5 @@ export const useWorkspace = defineStore('workspace', () => {
 })
 
 export function newSqlTab(): SqlTab {
-  return { id: `s${idSeq++}`, kind: 'sql', title: 'SQL', sql: 'SELECT * FROM ' }
+  return { id: `s${idSeq++}`, kind: 'sql', title: 'SQL', sql: 'SELECT * FROM ', view: createTabView() }
 }
