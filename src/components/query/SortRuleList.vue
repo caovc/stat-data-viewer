@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, shallowRef } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { DeleteOutlined, HolderOutlined } from '@antdv-next/icons'
 import { Button, Segmented, Select, theme } from 'antdv-next'
+import { usePointerReorder } from '../../composables/usePointerReorder'
+import { moveById } from '../../utils/columnLayout'
 import type { QueryColumn, SortDraft } from '../../utils/queryRules'
 
 const items = defineModel<SortDraft[]>({ required: true })
@@ -13,8 +15,9 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const { token } = theme.useToken()
-const dragId = shallowRef<string | null>(null)
-const overId = shallowRef<string | null>(null)
+const { dragId, overId, onHandlePointerDown } = usePointerReorder((from, to) => {
+  items.value = moveById(items.value, from, to, (item) => item.id)
+})
 
 const dirOptions = computed(() => [
   { label: t('query.asc'), value: 'asc' },
@@ -44,43 +47,22 @@ function setDir(id: string, desc: boolean) {
 function remove(id: string) {
   items.value = items.value.filter((item) => item.id !== id)
 }
-
-function onDragStart(event: DragEvent, id: string) {
-  event.dataTransfer?.setData('text/plain', id)
-  dragId.value = id
-}
-
-function onDrop(id: string) {
-  const from = items.value.findIndex((item) => item.id === dragId.value)
-  const to = items.value.findIndex((item) => item.id === id)
-  if (from >= 0 && to >= 0 && from !== to) {
-    const next = [...items.value]
-    const [moved] = next.splice(from, 1)
-    next.splice(to, 0, moved)
-    items.value = next
-  }
-  dragId.value = null
-  overId.value = null
-}
 </script>
 
 <template>
-  <Flex vertical gap="small">
+  <div class="sort-list">
     <div
       v-for="(item, index) in items"
       :key="item.id"
       class="sort-row"
       :class="{ dragging: dragId === item.id, 'drag-over': overId === item.id && dragId !== item.id }"
-      @dragover.prevent="overId = item.id"
-      @drop.prevent="onDrop(item.id)"
+      :data-reorder-id="item.id"
     >
       <button
         class="drag-handle"
         type="button"
-        draggable="true"
         :aria-label="t('query.reorder')"
-        @dragstart="onDragStart($event, item.id)"
-        @dragend="dragId = null; overId = null"
+        @pointerdown="onHandlePointerDown(item.id, $event)"
       >
         <HolderOutlined />
       </button>
@@ -104,10 +86,16 @@ function onDrop(id: string) {
         <template #icon><DeleteOutlined /></template>
       </Button>
     </div>
-  </Flex>
+  </div>
 </template>
 
 <style scoped>
+.sort-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .sort-row {
   display: grid;
   grid-template-columns: 28px 18px minmax(0, 1fr) auto auto;
@@ -138,6 +126,7 @@ function onDrop(id: string) {
   border: 0;
   color: v-bind('token.colorTextTertiary');
   background: transparent;
+  touch-action: none;
   cursor: grab;
 }
 

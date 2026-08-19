@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, shallowRef } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { TypographyText, theme } from 'antdv-next'
 import ColumnSettingsItem from './ColumnSettingsItem.vue'
+import { usePointerReorder } from '../../composables/usePointerReorder'
 import type { ColumnPin, ColumnSetting } from '../../types'
 
 const props = defineProps<{
@@ -17,8 +18,6 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const { token } = theme.useToken()
-const dragName = shallowRef<string | null>(null)
-const overName = shallowRef<string | null>(null)
 
 const groups = computed(() => [
   { key: 'start', title: t('columns.pinnedLeft'), items: props.items.filter((item) => item.pin === 'start') },
@@ -34,24 +33,10 @@ function sameGroup(from: string, to: string) {
   return pinOfName(from) === pinOfName(to)
 }
 
-function onDragStart(name: string) {
-  dragName.value = name
-}
-
-function onDragOver(name: string) {
-  if (dragName.value && sameGroup(dragName.value, name)) overName.value = name
-}
-
-function onDrop(name: string) {
-  if (dragName.value && sameGroup(dragName.value, name)) emit('reorder', dragName.value, name)
-  dragName.value = null
-  overName.value = null
-}
-
-function onDragEnd() {
-  dragName.value = null
-  overName.value = null
-}
+const { dragId: dragName, overId: overName, onHandlePointerDown } = usePointerReorder(
+  (from, to) => emit('reorder', from, to),
+  sameGroup,
+)
 
 function onToggle(name: string, visible: boolean) {
   emit('toggle', name, visible)
@@ -82,10 +67,7 @@ function onPin(name: string, pin: ColumnPin) {
         :drag-over="overName === item.name && dragName !== item.name"
         @toggle="onToggle"
         @pin="onPin"
-        @drag-start="onDragStart"
-        @drag-over="onDragOver"
-        @drop="onDrop"
-        @drag-end="onDragEnd"
+        @reorder-pointer-down="onHandlePointerDown(item.name, $event)"
       />
     </section>
   </div>

@@ -24,10 +24,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   toggle: [name: string, visible: boolean]
   pin: [name: string, pin: ColumnPin]
-  dragStart: [name: string]
-  dragOver: [name: string]
-  drop: [name: string]
-  dragEnd: []
+  reorderPointerDown: [event: PointerEvent]
 }>()
 
 const { t } = useI18n()
@@ -41,26 +38,19 @@ function togglePin(next: Exclude<ColumnPin, null>) {
   emit('pin', props.name, props.pin === next ? null : next)
 }
 
-function onDragStart(event: DragEvent) {
-  event.dataTransfer?.setData('text/plain', props.name)
-  emit('dragStart', props.name)
-}
 </script>
 
 <template>
   <div
     class="column-row"
     :class="{ dragging, 'drag-over': dragOver, hidden: !visible }"
-    @dragover.prevent="emit('dragOver', name)"
-    @drop.prevent="emit('drop', name)"
+    :data-reorder-id="name"
   >
     <button
       class="drag-handle"
       type="button"
-      draggable="true"
       :aria-label="t('columns.drag')"
-      @dragstart="onDragStart"
-      @dragend="emit('dragEnd')"
+      @pointerdown="emit('reorderPointerDown', $event)"
     >
       <HolderOutlined />
     </button>
@@ -143,6 +133,7 @@ function onDragStart(event: DragEvent) {
   border: 0;
   color: v-bind('token.colorTextTertiary');
   background: transparent;
+  touch-action: none;
   cursor: grab;
 }
 

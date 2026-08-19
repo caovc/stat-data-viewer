@@ -27,6 +27,14 @@ export function moveItem<T>(list: T[], from: number, to: number): T[] {
   return next
 }
 
+export function moveById<T>(list: T[], fromId: string, toId: string, idOf: (item: T) => string): T[] {
+  return moveItem(
+    list,
+    list.findIndex((item) => idOf(item) === fromId),
+    list.findIndex((item) => idOf(item) === toId),
+  )
+}
+
 export function displayColumnNames(
   order: string[],
   pinnedStart: string[],
