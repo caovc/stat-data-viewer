@@ -73,7 +73,7 @@ function toggle(value: string, checked: boolean) {
         </Checkbox>
         <Checkbox v-model:checked="includeEmpty">
           <Flex align="center" justify="space-between" class="value-row">
-            <span>{{ t('filter.empty') }}</span>
+            <span class="value-label">{{ t('filter.empty') }}</span>
             <TypographyText type="secondary" class="value-count">{{ emptyCount }}</TypographyText>
           </Flex>
         </Checkbox>
@@ -113,22 +113,30 @@ function toggle(value: string, checked: boolean) {
 .value-row {
   width: 100%;
   min-width: 0;
+  gap: 12px;
 }
 
 .value-label {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
 }
 
 .value-count {
   flex: 0 0 auto;
-  margin-left: 8px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
+  line-height: 1.4;
 }
 
 :deep(.ant-checkbox-wrapper) {
-  align-items: flex-start;
+  display: flex;
+  align-items: center;
   width: 100%;
   margin-inline-start: 0;
+}
+
+:deep(.ant-checkbox-wrapper > span:not(.ant-checkbox)) {
+  flex: 1;
+  min-width: 0;
 }
 </style>

@@ -61,7 +61,13 @@ function togglePin(next: Exclude<ColumnPin, null>) {
       :is-datetime="isDatetime"
     />
     <div class="column-copy">
-      <TypographyText :ellipsis="{ tooltip: name }" :disabled="!visible">{{ name }}</TypographyText>
+      <TypographyText
+        :ellipsis="{ tooltip: name }"
+        :disabled="!visible"
+        class="column-name"
+      >
+        {{ name }}
+      </TypographyText>
       <TypographyText
         v-if="label"
         type="secondary"
@@ -142,12 +148,21 @@ function togglePin(next: Exclude<ColumnPin, null>) {
 }
 
 .column-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
   min-width: 0;
+  overflow: hidden;
   line-height: 1.25;
 }
 
+.column-name,
 .column-label {
   display: block;
+  max-width: 100%;
+}
+
+.column-label {
   font-size: 12px;
 }
 
