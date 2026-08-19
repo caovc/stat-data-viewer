@@ -43,7 +43,7 @@
         "mimeType": "application/x-sas-data"
       },
       {
-        "ext": ["xpt"],
+        "ext": ["xpt", "xport"],
         "name": "SAS Transport",
         "description": "SAS transport file",
         "role": "Viewer",

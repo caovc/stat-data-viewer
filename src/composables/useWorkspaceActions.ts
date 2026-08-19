@@ -1,9 +1,11 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { open } from '@tauri-apps/plugin-dialog'
 import { storeToRefs } from 'pinia'
-import { DATA_FILTERS } from '../api'
+import { DATA_FILTERS, takePendingOpenPaths } from '../api'
 import { newSqlTab, useWorkspace } from '../stores/workspace'
+import { consumePendingOpenPaths } from '../utils/associatedFiles'
 
 let opening = false
 
@@ -34,6 +36,22 @@ export function useWorkspaceActions() {
     }
   }
 
+  async function openAssociatedPaths() {
+    await consumePendingOpenPaths(takePendingOpenPaths, (path) => store.openPath(path))
+  }
+
+  async function bindAssociatedFiles(): Promise<UnlistenFn | null> {
+    try {
+      const unlisten = await listen('open-files', () => {
+        void openAssociatedPaths()
+      })
+      await openAssociatedPaths()
+      return unlisten
+    } catch {
+      return null
+    }
+  }
+
   function addSql() {
     store.addTab(newSqlTab())
     store.showSql = true
@@ -51,6 +69,7 @@ export function useWorkspaceActions() {
     store,
     currentPage,
     openFiles,
+    bindAssociatedFiles,
     addSql,
     changePage,
   }

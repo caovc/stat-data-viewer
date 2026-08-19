@@ -16,7 +16,7 @@ import { useAppMenu } from '../composables/useAppMenu'
 import { useWorkspaceActions } from '../composables/useWorkspaceActions'
 
 const { token } = theme.useToken()
-const { store, openFiles } = useWorkspaceActions()
+const { store, openFiles, bindAssociatedFiles } = useWorkspaceActions()
 const { error, dragging, showReimport, showExport } = storeToRefs(store)
 
 useAppMenu(openFiles)
@@ -41,7 +41,7 @@ onMounted(async () => {
   window.addEventListener('contextmenu', onContextMenu)
   window.addEventListener('keydown', onKey)
   await store.bindEvents()
-  const unlisten = await getCurrentWebview().onDragDropEvent(async (event) => {
+  const unlistenDrop = await getCurrentWebview().onDragDropEvent(async (event) => {
     if (event.payload.type === 'over') store.dragging = true
     if (event.payload.type === 'leave') store.dragging = false
     if (event.payload.type === 'drop') {
@@ -49,10 +49,12 @@ onMounted(async () => {
       for (const path of event.payload.paths) await store.openPath(path)
     }
   })
+  const unlistenAssoc = await bindAssociatedFiles()
   onUnmounted(() => {
     window.removeEventListener('contextmenu', onContextMenu)
     window.removeEventListener('keydown', onKey)
-    unlisten()
+    unlistenDrop()
+    unlistenAssoc?.()
   })
 })
 </script>

@@ -12,10 +12,10 @@ export const DATA_FILTERS = [
   {
     key: 'files.all' as const,
     name: 'Statistical data',
-    extensions: ['sas7bdat', 'xpt', 'sav', 'zsav', 'por', 'dta'],
+    extensions: ['sas7bdat', 'xpt', 'xport', 'sav', 'zsav', 'por', 'dta'],
   },
   { key: 'files.sas' as const, name: 'SAS dataset', extensions: ['sas7bdat'] },
-  { key: 'files.xpt' as const, name: 'SAS transport', extensions: ['xpt'] },
+  { key: 'files.xpt' as const, name: 'SAS transport', extensions: ['xpt', 'xport'] },
   { key: 'files.spss' as const, name: 'SPSS', extensions: ['sav', 'zsav', 'por'] },
   { key: 'files.stata' as const, name: 'Stata', extensions: ['dta'] },
 ]
@@ -74,4 +74,8 @@ export function getMetadata(table: string) {
 
 export function columnDistinct(args: { table: string; column: string; limit?: number }) {
   return invoke<DistinctResult>('column_distinct', { args })
+}
+
+export function takePendingOpenPaths() {
+  return invoke<string[]>('take_pending_open_paths')
 }
