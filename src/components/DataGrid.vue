@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, shallowRef, useTemplateRef, watch, watchEffect } from 'vue'
+import { computed, nextTick, shallowRef, useTemplateRef, watch, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   createColumnHelper,
@@ -13,7 +13,6 @@ import { storeToRefs } from 'pinia'
 import ColumnFilter from './ColumnFilter.vue'
 import ColumnHeaderTitle from './columns/ColumnHeaderTitle.vue'
 import ColumnResizeHandle from './ColumnResizeHandle.vue'
-import GridCellText from './GridCellText.vue'
 import { useWorkspace } from '../stores/workspace'
 import type { ColumnInfo, DistinctValue, FilterSpec, ValueLabel } from '../types'
 import { findCondition, hasColumnFilter, removeColumnConditions, upsertCondition } from '../utils/queryRules'
@@ -25,13 +24,14 @@ import {
   pinStickyStyle,
   visiblePinned,
 } from '../utils/columnLayout'
-import { GRID_ROW_HEIGHT, virtualRowPads, virtualWindowUncovered } from '../utils/virtualTable'
+import { overflowTitle } from '../utils/tabCache'
+import { GRID_OVERSCAN, GRID_ROW_HEIGHT, virtualRowPads, virtualWindowUncovered } from '../utils/virtualTable'
 import { LOAD_MORE_THRESHOLD, shouldFetchMore } from '../utils/infiniteScroll'
 
 const { t } = useI18n()
 const { token } = theme.useToken()
 const store = useWorkspace()
-const { page, metadata, metadataByTable, labelMode, headerMode, sorts, offset, hidden, pinnedStart, pinnedEnd, columnWidths, filters, dataTab, scrollMode, loading, loadingMore, error } = storeToRefs(store)
+const { page, metadata, metadataByTable, labelMode, headerMode, sorts, offset, hidden, pinnedStart, pinnedEnd, columnWidths, filters, dataTab, scrollMode, loading, loadingMore, error, activeId } = storeToRefs(store)
 
 const scroller = useTemplateRef<HTMLElement>('scroller')
 const filterCol = shallowRef<string | null>(null)
@@ -156,20 +156,28 @@ const tableWidth = computed(() =>
   ['_row', ...displayCols.value.map((col) => col.name)].reduce((sum, name) => sum + sizeOf(name), 0),
 )
 
-function pinClass(name: string) {
-  if (name === '_row') return 'row-head'
-  if (visiblePinnedStart.value.includes(name)) {
-    return name === visiblePinnedStart.value.at(-1) ? 'pin-start pin-start-last' : 'pin-start'
+const pinClassByName = computed(() => {
+  const map = new Map<string, string>()
+  map.set('_row', 'row-head')
+  const start = visiblePinnedStart.value
+  const end = visiblePinnedEnd.value
+  for (const name of displayedNames.value) {
+    if (start.includes(name)) {
+      map.set(name, name === start.at(-1) ? 'pin-start pin-start-last' : 'pin-start')
+    } else if (end.includes(name)) {
+      map.set(name, name === end[0] ? 'pin-end pin-end-first' : 'pin-end')
+    }
   }
-  if (visiblePinnedEnd.value.includes(name)) {
-    return name === visiblePinnedEnd.value[0] ? 'pin-end pin-end-first' : 'pin-end'
-  }
-  return ''
-}
+  return map
+})
 
-function pinStyle(name: string) {
-  return pinStickyStyle(name, visiblePinnedStart.value, visiblePinnedEnd.value, sizeOf)
-}
+const pinStyleByName = computed(() => {
+  const map = new Map<string, Record<string, string>>()
+  for (const name of ['_row', ...displayedNames.value]) {
+    map.set(name, pinStickyStyle(name, visiblePinnedStart.value, visiblePinnedEnd.value, sizeOf))
+  }
+  return map
+})
 
 function displayOf(cell: { column: { columnDef: { cell?: unknown } }; getContext: () => unknown; getValue: () => unknown }) {
   const render = cell.column.columnDef.cell
@@ -207,7 +215,7 @@ const virtualizer = useVirtualizer(
     count: table.getRowModel().rows.length,
     getScrollElement: () => scroller.value,
     estimateSize: () => GRID_ROW_HEIGHT,
-    overscan: 36,
+    overscan: GRID_OVERSCAN,
   })),
 )
 
@@ -229,6 +237,19 @@ watch(
   },
 )
 
+const scrollByTab = new Map<string, number>()
+
+watch(activeId, (id, prev) => {
+  if (prev && scroller.value) scrollByTab.set(prev, scroller.value.scrollTop)
+  filterCol.value = null
+  resizingId.value = null
+  paintedItems.value = []
+  void nextTick(() => {
+    if (!scroller.value) return
+    scroller.value.scrollTop = id ? (scrollByTab.get(id) ?? 0) : 0
+  })
+})
+
 const virtualItems = computed(() => {
   const items = virtualizer.value.getVirtualItems()
   return items.length > 0 ? items : paintedItems.value
@@ -242,13 +263,40 @@ const showGridLoading = computed(() => {
   if (loading.value) return true
   if (!(page.value?.rows.length)) return false
   const instance = virtualizer.value
+  const items = instance.getVirtualItems()
+  if (items.length === 0) return false
   return virtualWindowUncovered({
-    items: instance.getVirtualItems(),
+    items,
     scrollOffset: instance.scrollOffset ?? 0,
     viewportSize: instance.scrollRect?.height ?? 0,
     headerSize: headerSize.value,
     totalSize: instance.getTotalSize(),
   })
+})
+
+const paintedRows = computed(() => {
+  void page.value
+  void columnDefs.value
+  const rows = table.getRowModel().rows
+  const cols = colByName.value
+  const classes = pinClassByName.value
+  const styles = pinStyleByName.value
+  return virtualItems.value.map((vrow) => ({
+    index: vrow.index,
+    size: vrow.size,
+    even: vrow.index % 2 === 1,
+    cells: (rows[vrow.index]?.getVisibleCells() ?? []).map((cell) => {
+      const columnId = cell.column.id
+      return {
+        id: cell.id,
+        columnId,
+        text: displayOf(cell),
+        num: columnId !== '_row' && cols.get(columnId)?.storageType !== 'string',
+        pinClass: classes.get(columnId),
+        pinStyle: styles.get(columnId),
+      }
+    }),
+  }))
 })
 
 watchEffect(() => {
@@ -323,6 +371,13 @@ function pageValuesOf(name: string): DistinctValue[] {
   return [...counts.entries()].map(([value, count]) => ({ value, label: value, count }))
 }
 
+const openPageValues = computed(() => (filterCol.value ? pageValuesOf(filterCol.value) : []))
+
+function onCellEnter(event: Event) {
+  const node = event.currentTarget as HTMLElement
+  node.title = overflowTitle(node, node.textContent ?? '')
+}
+
 function hasFilter(name: string) {
   return hasColumnFilter(filters.value, name)
 }
@@ -367,14 +422,14 @@ function onFilterOpen(column: string, open: boolean) {
               v-for="header in group.headers"
               :key="header.id"
                 :class="[
-                pinClass(header.id),
+                pinClassByName.get(header.id),
                 {
                   num: header.id !== '_row' && colByName.get(header.id)?.storageType !== 'string',
                   resizing: resizingId === header.id,
                   sortable: Boolean(dataTab) && header.id !== '_row',
                 },
               ]"
-              :style="pinStyle(header.id)"
+              :style="pinStyleByName.get(header.id)"
               @click="onHeader(header.id, $event)"
             >
               <Flex class="th-inner" align="center" :gap="4" :justify="header.id === '_row' ? 'flex-end' : 'space-between'">
@@ -396,12 +451,12 @@ function onFilterOpen(column: string, open: boolean) {
                     <span v-if="(sortByName.get(header.id)?.total ?? 0) > 1" class="sort-ord">{{ (sortByName.get(header.id)?.index ?? 0) + 1 }}</span>
                   </span>
                   <Popover
-                    v-if="dataTab"
+                    v-if="dataTab && filterCol === header.id"
                     trigger="click"
-                    :open="filterCol === header.id"
+                    :open="true"
                     @open-change="onFilterOpen(header.id, $event)"
                   >
-                    <span class="filter-trigger" :class="{ active: hasFilter(header.id) }">
+                    <span class="filter-trigger active">
                       <FilterOutlined class="filter-icon" />
                     </span>
                     <template #content>
@@ -412,15 +467,23 @@ function onFilterOpen(column: string, open: boolean) {
                         :is-datetime="colByName.get(header.id)?.isDatetime ?? false"
                         :existing="findCondition(filters, header.id)"
                         :table="dataTab?.tableName"
-                        :page-values="pageValuesOf(header.id)"
+                        :page-values="openPageValues"
                         :format-value="(raw) => formatFilterValue(header.id, raw)"
-                        :active="filterCol === header.id"
+                        :active="true"
                         @apply="applyFilter"
                         @clear="clearFilter(header.id)"
                         @cancel="filterCol = null"
                       />
                     </template>
                   </Popover>
+                  <span
+                    v-else-if="dataTab"
+                    class="filter-trigger"
+                    :class="{ active: hasFilter(header.id) }"
+                    @click.stop="onFilterOpen(header.id, true)"
+                  >
+                    <FilterOutlined class="filter-icon" />
+                  </span>
                 </span>
               </Flex>
               <ColumnResizeHandle
@@ -444,21 +507,18 @@ function onFilterOpen(column: string, open: boolean) {
               </td>
             </tr>
             <tr
-              v-for="vrow in virtualItems"
-              :key="vrow.index"
-              :class="{ even: vrow.index % 2 === 1 }"
-              :style="{ height: `${vrow.size}px` }"
+              v-for="row in paintedRows"
+              :key="row.index"
+              :class="{ even: row.even }"
+              :style="{ height: `${row.size}px` }"
             >
               <td
-                v-for="cell in table.getRowModel().rows[vrow.index]?.getVisibleCells() ?? []"
+                v-for="cell in row.cells"
                 :key="cell.id"
-                :class="[
-                  pinClass(cell.column.id),
-                  { num: cell.column.id !== '_row' && colByName.get(cell.column.id)?.storageType !== 'string' },
-                ]"
-                :style="pinStyle(cell.column.id)"
+                :class="[cell.pinClass, { num: cell.num }]"
+                :style="cell.pinStyle"
               >
-                <GridCellText :text="displayOf(cell)" />
+                <span class="cell-text" @mouseenter="onCellEnter">{{ cell.text }}</span>
               </td>
             </tr>
             <tr v-if="virtualPads.bottom > 0" class="virtual-pad" aria-hidden="true">
@@ -652,11 +712,17 @@ function onFilterOpen(column: string, open: boolean) {
   line-height: 1.2;
 }
 
-.grid-table th :deep(.header-title),
-.grid-table th :deep(.ant-tooltip-disabled-compatible-wrapper),
-.grid-table td :deep(.ant-tooltip-disabled-compatible-wrapper) {
+.grid-table th :deep(.header-title) {
   min-width: 0;
   max-width: 100%;
+}
+
+.cell-text {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .th-actions {

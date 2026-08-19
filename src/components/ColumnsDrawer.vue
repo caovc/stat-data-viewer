@@ -72,6 +72,7 @@ function onReorder(from: string, to: string) {
     :title="t('columns.title')"
     placement="right"
     :size="420"
+    destroy-on-hidden
   >
     <template #extra>
       <Button :disabled="!canReset" @click="store.resetColumnLayout()">

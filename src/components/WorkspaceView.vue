@@ -9,7 +9,7 @@ import { useWorkspaceActions } from '../composables/useWorkspaceActions'
 
 const { token } = theme.useToken()
 const { store, openFiles } = useWorkspaceActions()
-const { tabs, activeId, showSql, loading } = storeToRefs(store)
+const { tabs, showSql, loading } = storeToRefs(store)
 
 const panelLock = {
   panel: {
@@ -28,7 +28,7 @@ const panelLock = {
         <SplitterPanel>
           <Spin :spinning="loading" class="workspace-spin">
             <EmptyState v-if="tabs.length === 0" @open="openFiles" />
-            <DataGrid v-else :key="activeId ?? 'grid'" />
+            <DataGrid v-else />
           </Spin>
         </SplitterPanel>
         <SplitterPanel :default-size="220" :min="140" collapsible>
@@ -37,7 +37,7 @@ const panelLock = {
       </Splitter>
       <Spin v-else :spinning="loading" class="workspace-spin">
         <EmptyState v-if="tabs.length === 0" @open="openFiles" />
-        <DataGrid v-else :key="activeId ?? 'grid'" />
+        <DataGrid v-else />
       </Spin>
     </div>
   </div>

@@ -1,4 +1,5 @@
 export const GRID_ROW_HEIGHT = 32
+export const GRID_OVERSCAN = 10
 
 export type VirtualRangeItem = {
   start: number

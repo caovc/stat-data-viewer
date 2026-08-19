@@ -21,6 +21,7 @@ import type {
 } from '../types'
 import { loadPreferences, savePreferences } from '../preferences'
 import { appendPageRows } from '../utils/infiniteScroll'
+import { shouldDropInactiveCache, shouldFetchOnActivate } from '../utils/tabCache'
 import {
   displayColumnNames,
   mergeColumnOrder,
@@ -174,26 +175,29 @@ export const useWorkspace = defineStore('workspace', () => {
       showVariables.value = false
       return
     }
-    await refresh({ silent: Boolean(pageById.value[id]) })
+    if (!shouldFetchOnActivate(pageById.value[id])) return
+    await refresh()
   }
 
   function closeTab(id: string) {
     const idx = tabs.value.findIndex((t) => t.id === id)
     if (idx < 0) return
+    const wasActive = activeId.value === id
     tabs.value.splice(idx, 1)
-    setPage(id, null)
-    if (activeId.value !== id) return
-    showReimport.value = false
-    showExport.value = false
-    const next = tabs.value[idx] ?? tabs.value[idx - 1] ?? null
-    activeId.value = next?.id ?? null
-    if (!next) {
-      showColumns.value = false
-      showQuery.value = false
-      showVariables.value = false
-      return
+    if (wasActive) {
+      showReimport.value = false
+      showExport.value = false
+      const next = tabs.value[idx] ?? tabs.value[idx - 1] ?? null
+      activeId.value = next?.id ?? null
+      if (!next) {
+        showColumns.value = false
+        showQuery.value = false
+        showVariables.value = false
+      } else {
+        void activate(next.id)
+      }
     }
-    void activate(next.id)
+    setPage(id, null)
   }
 
   async function openPath(path: string, extra?: { encoding?: string; format?: string; catalogPath?: string }) {
@@ -574,7 +578,11 @@ export const useWorkspace = defineStore('workspace', () => {
       tab.error = payload.error
       if (payload.error) error.value = payload.error
       if (payload.previewReady || payload.complete) {
-        if (activeId.value === tab.id) await refresh({ silent: Boolean(pageById.value[tab.id]) })
+        if (activeId.value === tab.id) {
+          await refresh({ silent: Boolean(pageById.value[tab.id]) })
+        } else if (shouldDropInactiveCache(false, payload.complete)) {
+          setPage(tab.id, null)
+        }
       }
     })
   }

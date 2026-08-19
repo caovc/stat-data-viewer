@@ -57,6 +57,7 @@ const labelColumns = computed(() => [
     placement="left"
     :size="panelSize"
     :max-size="800"
+    destroy-on-hidden
     :resizable="{ onResize }"
   >
     <template #extra>
