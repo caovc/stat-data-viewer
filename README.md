@@ -51,7 +51,7 @@ npm run tauri build -- --target universal-apple-darwin
 npm run tauri build
 ```
 
-Linux packages are not a release target yet. CI compiles on Ubuntu to catch ReadStat / DuckDB build breaks.
+Linux packages are not a release target yet.
 
 GitHub Actions builds installers on a `v*` tag (or the **Release** workflow):
 
