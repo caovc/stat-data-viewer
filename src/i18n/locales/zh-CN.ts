@@ -19,7 +19,9 @@ export default {
     reimport: '重新导入',
     export: '导出',
     sql: 'SQL',
-    columns: '列',
+    columns: '列管理',
+    variables: '变量信息',
+    variablesHint: '变量标签、格式和值标签',
     query: '排序筛选',
     queryHint: '多列排序与多列筛选',
     colName: '列名',
@@ -61,7 +63,7 @@ export default {
     partial: '部分导入',
   },
   columns: {
-    title: '列设置',
+    title: '列管理',
     reset: '恢复默认',
     hint: '拖动可调整顺序。固定列会始终显示在表格左侧或右侧。',
     empty: '打开数据集后可选择列。',
@@ -99,7 +101,7 @@ export default {
     fmtDta: 'Stata dta',
   },
   meta: {
-    variables: '变量',
+    variables: '变量信息',
     empty: '打开数据集后可查看变量标签、格式和缺失值规则。',
     search: '搜索变量',
     valueLabels: '值标签',

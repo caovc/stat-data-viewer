@@ -3,7 +3,6 @@ import { storeToRefs } from 'pinia'
 import { Spin, Splitter, SplitterPanel, theme } from 'antdv-next'
 import DataGrid from './DataGrid.vue'
 import EmptyState from './EmptyState.vue'
-import MetadataPanel from './MetadataPanel.vue'
 import SqlEditor from './SqlEditor.vue'
 import ViewToolbar from './ViewToolbar.vue'
 import { useWorkspaceActions } from '../composables/useWorkspaceActions'
@@ -22,31 +21,26 @@ const panelLock = {
 </script>
 
 <template>
-  <Splitter class="workspace" :styles="panelLock">
-    <SplitterPanel :default-size="280" :min="200" :max="460" collapsible>
-      <MetadataPanel />
-    </SplitterPanel>
-    <SplitterPanel>
-      <div class="workspace-main">
-        <ViewToolbar v-if="tabs.length > 0" />
-        <Splitter v-if="showSql" orientation="vertical" class="workspace-body" :styles="panelLock">
-          <SplitterPanel>
-            <Spin :spinning="loading" class="workspace-spin">
-              <EmptyState v-if="tabs.length === 0" @open="openFiles" />
-              <DataGrid v-else :key="activeId ?? 'grid'" />
-            </Spin>
-          </SplitterPanel>
-          <SplitterPanel :default-size="220" :min="140" collapsible>
-            <SqlEditor />
-          </SplitterPanel>
-        </Splitter>
-        <Spin v-else :spinning="loading" class="workspace-spin">
-          <EmptyState v-if="tabs.length === 0" @open="openFiles" />
-          <DataGrid v-else :key="activeId ?? 'grid'" />
-        </Spin>
-      </div>
-    </SplitterPanel>
-  </Splitter>
+  <div class="workspace">
+    <div class="workspace-main">
+      <ViewToolbar v-if="tabs.length > 0" />
+      <Splitter v-if="showSql" orientation="vertical" class="workspace-body" :styles="panelLock">
+        <SplitterPanel>
+          <Spin :spinning="loading" class="workspace-spin">
+            <EmptyState v-if="tabs.length === 0" @open="openFiles" />
+            <DataGrid v-else :key="activeId ?? 'grid'" />
+          </Spin>
+        </SplitterPanel>
+        <SplitterPanel :default-size="220" :min="140" collapsible>
+          <SqlEditor />
+        </SplitterPanel>
+      </Splitter>
+      <Spin v-else :spinning="loading" class="workspace-spin">
+        <EmptyState v-if="tabs.length === 0" @open="openFiles" />
+        <DataGrid v-else :key="activeId ?? 'grid'" />
+      </Spin>
+    </div>
+  </div>
 </template>
 
 <style scoped>

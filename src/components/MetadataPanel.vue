@@ -2,16 +2,20 @@
 import { computed, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { SearchOutlined } from '@antdv-next/icons'
-import { Empty, Flex, Input, Table, Tag, TypographyText, theme } from 'antdv-next'
+import { Drawer, Empty, Flex, Input, Table, Tag, TypographyText } from 'antdv-next'
 import { storeToRefs } from 'pinia'
 import ColumnTypeIcon from './columns/ColumnTypeIcon.vue'
 import { useWorkspace } from '../stores/workspace'
 
 const { t } = useI18n()
-const { token } = theme.useToken()
 const store = useWorkspace()
-const { metadata, dataTab } = storeToRefs(store)
+const { metadata, dataTab, showVariables } = storeToRefs(store)
 const query = shallowRef('')
+const panelSize = shallowRef(440)
+
+function onResize(next: number) {
+  panelSize.value = Math.min(800, Math.max(280, next))
+}
 
 const filteredVariables = computed(() => {
   const items = metadata.value?.variables ?? []
@@ -47,19 +51,23 @@ const labelColumns = computed(() => [
 </script>
 
 <template>
-  <aside class="meta-panel">
-    <Flex class="meta-head" align="center" justify="space-between">
-      <TypographyText strong>{{ t('meta.variables') }}</TypographyText>
+  <Drawer
+    v-model:open="showVariables"
+    :title="t('meta.variables')"
+    placement="left"
+    :size="panelSize"
+    :max-size="800"
+    :resizable="{ onResize }"
+  >
+    <template #extra>
       <Tag v-if="metadata" bordered>
         {{ metadata.variables.length }}
       </Tag>
-    </Flex>
+    </template>
     <div v-if="!dataTab" class="meta-empty">
-      <Empty
-        :description="t('meta.empty')"
-      />
+      <Empty :description="t('meta.empty')" />
     </div>
-    <Flex v-else vertical class="meta-body" :style="{ gap: `${token.paddingSM}px` }">
+    <Flex v-else vertical gap="small" class="meta-body">
       <Input
         v-model:value="query"
         allow-clear
@@ -75,7 +83,6 @@ const labelColumns = computed(() => [
         :columns="variableColumns"
         :data-source="filteredVariables"
         :pagination="false"
-        :scroll="{ y: metadata?.valueLabels.length ? 260 : 'calc(100vh - 260px)' }"
       >
         <template #bodyCell="{ column, record, text }">
           <Flex v-if="column.key === 'name'" align="center" :gap="6" class="name-cell">
@@ -118,32 +125,16 @@ const labelColumns = computed(() => [
           :columns="labelColumns"
           :data-source="labelRows"
           :pagination="false"
-          :scroll="{ y: 220 }"
         />
       </template>
     </Flex>
-  </aside>
+  </Drawer>
 </template>
 
 <style scoped>
-.meta-panel {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-width: 0;
-}
-
-.meta-head {
-  padding: 10px 12px;
-  border-bottom: 1px solid v-bind('token.colorBorderSecondary');
-}
-
 .meta-body,
 .meta-empty {
-  flex: 1;
-  min-height: 0;
-  padding: 12px;
-  overflow: auto;
+  min-width: 0;
 }
 
 .name-cell,

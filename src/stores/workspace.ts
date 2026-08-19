@@ -66,6 +66,7 @@ export const useWorkspace = defineStore('workspace', () => {
   const showExport = ref(false)
   const showColumns = ref(false)
   const showQuery = ref(false)
+  const showVariables = ref(false)
   const dragging = ref(false)
 
   const active = computed(() => tabs.value.find((t) => t.id === activeId.value) ?? null)
@@ -170,6 +171,7 @@ export const useWorkspace = defineStore('workspace', () => {
     const tab = tabs.value.find((t) => t.id === id)
     if (tab?.kind !== 'data') {
       showQuery.value = false
+      showVariables.value = false
       return
     }
     await refresh({ silent: Boolean(pageById.value[id]) })
@@ -188,6 +190,7 @@ export const useWorkspace = defineStore('workspace', () => {
     if (!next) {
       showColumns.value = false
       showQuery.value = false
+      showVariables.value = false
       return
     }
     void activate(next.id)
@@ -607,6 +610,7 @@ export const useWorkspace = defineStore('workspace', () => {
     showExport,
     showColumns,
     showQuery,
+    showVariables,
     dragging,
     addTab,
     activate,

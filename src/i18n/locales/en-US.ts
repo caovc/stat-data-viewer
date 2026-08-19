@@ -19,7 +19,9 @@ export default {
     reimport: 'Re-import',
     export: 'Export',
     sql: 'SQL',
-    columns: 'Columns',
+    columns: 'Manage columns',
+    variables: 'Variable info',
+    variablesHint: 'Variable labels, formats, and value labels',
     query: 'Sort & filter',
     queryHint: 'Multi-column sort and filter',
     colName: 'Name',
@@ -61,7 +63,7 @@ export default {
     partial: 'partial',
   },
   columns: {
-    title: 'Column settings',
+    title: 'Manage columns',
     reset: 'Reset default',
     hint: 'Drag to reorder. Pin a column to keep it at the left or right edge of the grid.',
     empty: 'Open a dataset to choose columns.',
@@ -99,7 +101,7 @@ export default {
     fmtDta: 'Stata dta',
   },
   meta: {
-    variables: 'Variables',
+    variables: 'Variable info',
     empty: 'Open a dataset to inspect variable labels, formats and missing-value rules.',
     search: 'Search variables',
     valueLabels: 'Value labels',

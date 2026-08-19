@@ -5,6 +5,7 @@ import { storeToRefs } from 'pinia'
 import { Alert, Layout, LayoutContent, LayoutFooter, LayoutHeader, theme } from 'antdv-next'
 import AppHeader from './AppHeader.vue'
 import ColumnsDrawer from './ColumnsDrawer.vue'
+import MetadataPanel from './MetadataPanel.vue'
 import SortFilterDrawer from './query/SortFilterDrawer.vue'
 import ExportDialog from './ExportDialog.vue'
 import ReimportDialog from './ReimportDialog.vue'
@@ -77,6 +78,7 @@ onMounted(async () => {
     <LayoutFooter class="app-footer">
       <StatusBar />
     </LayoutFooter>
+    <MetadataPanel />
     <ColumnsDrawer />
     <SortFilterDrawer />
     <ReimportDialog v-if="showReimport" />

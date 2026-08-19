@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import {
   ExportOutlined,
   FilterOutlined,
+  ProfileOutlined,
   ReloadOutlined,
   TableOutlined,
 } from '@antdv-next/icons'
@@ -15,7 +16,7 @@ import { filterCount } from '../utils/queryRules'
 const { t } = useI18n()
 const { token } = theme.useToken()
 const store = useWorkspace()
-const { dataTab, page, showQuery, sorts, filters } = storeToRefs(store)
+const { dataTab, page, showQuery, showVariables, sorts, filters } = storeToRefs(store)
 
 const queryCount = computed(() => sorts.value.length + filterCount(filters.value))
 </script>
@@ -37,6 +38,17 @@ const queryCount = computed(() => sorts.value.length + filterCount(filters.value
       <template #icon><ExportOutlined /></template>
       {{ t('header.export') }}
     </Button>
+    <Tooltip :title="t('header.variablesHint')">
+      <Button
+        size="small"
+        :disabled="!dataTab"
+        :type="showVariables ? 'primary' : 'default'"
+        @click="showVariables = !showVariables"
+      >
+        <template #icon><ProfileOutlined /></template>
+        {{ t('header.variables') }}
+      </Button>
+    </Tooltip>
     <Button size="small" :disabled="!page" @click="store.showColumns = !store.showColumns">
       <template #icon><TableOutlined /></template>
       {{ t('header.columns') }}
