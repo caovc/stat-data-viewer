@@ -1,3 +1,5 @@
+import { SCROLL_MODES, type ScrollMode } from './types'
+
 export const LOCALES = ['zh-CN', 'en-US'] as const
 export type AppLocale = (typeof LOCALES)[number]
 
@@ -10,6 +12,7 @@ export const PREFS_STORAGE_KEY = 'stat-data-viewer:preferences'
 export interface StoredPreferences {
   themeMode: ThemeMode
   locale: AppLocale
+  scrollMode: ScrollMode
 }
 
 export function isLocale(value: unknown): value is AppLocale {
@@ -18,6 +21,10 @@ export function isLocale(value: unknown): value is AppLocale {
 
 export function isThemeMode(value: unknown): value is ThemeMode {
   return THEME_MODES.includes(value as ThemeMode)
+}
+
+export function isScrollMode(value: unknown): value is ScrollMode {
+  return SCROLL_MODES.includes(value as ScrollMode)
 }
 
 export function detectLocale(): AppLocale {
@@ -31,14 +38,15 @@ export function detectSystemTheme(): ResolvedTheme {
 export function loadPreferences(): StoredPreferences {
   try {
     const raw = localStorage.getItem(PREFS_STORAGE_KEY)
-    if (!raw) return { themeMode: 'system', locale: detectLocale() }
+    if (!raw) return { themeMode: 'system', locale: detectLocale(), scrollMode: 'page' }
     const parsed = JSON.parse(raw) as Partial<StoredPreferences>
     return {
       themeMode: isThemeMode(parsed.themeMode) ? parsed.themeMode : 'system',
       locale: isLocale(parsed.locale) ? parsed.locale : detectLocale(),
+      scrollMode: isScrollMode(parsed.scrollMode) ? parsed.scrollMode : 'page',
     }
   } catch {
-    return { themeMode: 'system', locale: detectLocale() }
+    return { themeMode: 'system', locale: detectLocale(), scrollMode: 'page' }
   }
 }
 

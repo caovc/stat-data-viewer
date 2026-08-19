@@ -27,7 +27,11 @@ export const usePreferences = defineStore('preferences', () => {
 
   watch(
     [themeMode, locale],
-    () => savePreferences({ themeMode: themeMode.value, locale: locale.value }),
+    () => savePreferences({
+      ...loadPreferences(),
+      themeMode: themeMode.value,
+      locale: locale.value,
+    }),
   )
 
   watch(

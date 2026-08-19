@@ -13,11 +13,14 @@ import type {
   HeaderMode,
   LabelMode,
   PageResult,
+  ScrollMode,
   SortSpec,
   SqlTab,
   TabView,
   WorkspaceTab,
 } from '../types'
+import { loadPreferences, savePreferences } from '../preferences'
+import { appendPageRows } from '../utils/infiniteScroll'
 import {
   displayColumnNames,
   mergeColumnOrder,
@@ -42,6 +45,7 @@ export function createTabView(): TabView {
     columnWidths: {},
     offset: 0,
     pageSize: DEFAULT_PAGE_SIZE,
+    scrollMode: loadPreferences().scrollMode,
   }
 }
 
@@ -53,7 +57,9 @@ export const useWorkspace = defineStore('workspace', () => {
   const metadataByTable = shallowRef<Record<string, DatasetMeta>>({})
   const pageById = shallowRef<Record<string, PageResult>>({})
   const loading = ref(false)
+  const loadingMore = ref(false)
   const error = ref<string | null>(null)
+  let loadMoreGen = 0
   const fallbackSql = ref('SELECT * FROM ')
   const showSql = ref(false)
   const showReimport = ref(false)
@@ -123,6 +129,12 @@ export const useWorkspace = defineStore('workspace', () => {
     get: () => active.value?.view.pageSize ?? DEFAULT_PAGE_SIZE,
     set: (next) => {
       if (active.value) active.value.view.pageSize = next
+    },
+  })
+  const scrollMode = computed({
+    get: () => active.value?.view.scrollMode ?? 'page',
+    set: (next) => {
+      void setScrollMode(next)
     },
   })
   const sqlDraft = computed({
@@ -209,6 +221,25 @@ export const useWorkspace = defineStore('workspace', () => {
     await refresh()
   }
 
+  function invalidateLoadMore() {
+    loadMoreGen += 1
+    loadingMore.value = false
+  }
+
+  async function fetchChunk(tab: WorkspaceTab, offset: number, pageSize = tab.view.pageSize) {
+    if (tab.kind === 'data') {
+      return api.queryPage({
+        table: tab.tableName,
+        offset,
+        pageSize,
+        sorts: tab.view.sorts,
+        filters: tab.view.filters,
+        hidden: tab.view.hidden,
+      })
+    }
+    return api.runSql({ sql: tab.sql, offset, pageSize })
+  }
+
   async function refresh(opts?: { silent?: boolean }) {
     const tab = active.value
     if (!tab) return
@@ -220,18 +251,28 @@ export const useWorkspace = defineStore('workspace', () => {
     const silent = opts?.silent ?? false
     if (!silent) loading.value = true
     error.value = null
+    invalidateLoadMore()
     try {
       const meta = await api.getMetadata(tab.tableName)
       rememberMeta(meta)
       syncColumnOrder(meta.variables.map((item) => item.name))
-      setPage(tab.id, await api.queryPage({
-        table: tab.tableName,
-        offset: tab.view.offset,
-        pageSize: tab.view.pageSize,
-        sorts: tab.view.sorts,
-        filters: tab.view.filters,
-        hidden: tab.view.hidden,
-      }))
+      const current = pageById.value[tab.id]
+      if (
+        silent
+        && tab.view.scrollMode === 'infinite'
+        && current
+        && current.rows.length > tab.view.pageSize
+      ) {
+        const probe = await fetchChunk(tab, 0, 1)
+        setPage(tab.id, {
+          ...current,
+          columns: probe.columns,
+          totalRows: probe.totalRows,
+          offset: 0,
+        })
+        return
+      }
+      setPage(tab.id, await fetchChunk(tab, tab.view.offset))
     } catch (e) {
       error.value = String(e)
     } finally {
@@ -243,12 +284,26 @@ export const useWorkspace = defineStore('workspace', () => {
     const silent = opts?.silent ?? false
     if (!silent) loading.value = true
     error.value = null
+    invalidateLoadMore()
     try {
-      const result = await api.runSql({
-        sql: tab.sql,
-        offset: tab.view.offset,
-        pageSize: tab.view.pageSize,
-      })
+      const current = pageById.value[tab.id]
+      if (
+        silent
+        && tab.view.scrollMode === 'infinite'
+        && current
+        && current.rows.length > tab.view.pageSize
+      ) {
+        const probe = await fetchChunk(tab, 0, 1)
+        setPage(tab.id, {
+          ...current,
+          columns: probe.columns,
+          totalRows: probe.totalRows,
+          offset: 0,
+        })
+        syncColumnOrder(probe.columns.map((item) => item.name))
+        return
+      }
+      const result = await fetchChunk(tab, tab.view.offset)
       setPage(tab.id, result)
       syncColumnOrder(result.columns.map((item) => item.name))
     } catch (e) {
@@ -279,7 +334,8 @@ export const useWorkspace = defineStore('workspace', () => {
           })()
       tab.sql = sql
       tab.view.offset = 0
-      const result = await api.runSql({ sql, offset: 0, pageSize: tab.view.pageSize })
+      invalidateLoadMore()
+      const result = await fetchChunk(tab, 0)
       setPage(tab.id, result)
       syncColumnOrder(result.columns.map((item) => item.name))
     } catch (e) {
@@ -366,6 +422,38 @@ export const useWorkspace = defineStore('workspace', () => {
     view.pageSize = next
     view.offset = 0
     await refresh()
+  }
+
+  async function setScrollMode(next: ScrollMode) {
+    const view = active.value?.view
+    if (!view || view.scrollMode === next) return
+    view.scrollMode = next
+    view.offset = 0
+    savePreferences({ ...loadPreferences(), scrollMode: next })
+    await refresh()
+  }
+
+  async function loadMore() {
+    const tab = active.value
+    if (!tab || tab.view.scrollMode !== 'infinite') return
+    const current = pageById.value[tab.id]
+    if (!current || loadingMore.value || current.rows.length >= current.totalRows) return
+    const expected = current.rows.length
+    loadingMore.value = true
+    const gen = ++loadMoreGen
+    error.value = null
+    try {
+      const next = await fetchChunk(tab, expected)
+      if (gen !== loadMoreGen || activeId.value !== tab.id) return
+      const latest = pageById.value[tab.id]
+      if (!latest) return
+      const appended = appendPageRows(latest, next)
+      if (appended !== latest) setPage(tab.id, appended)
+    } catch (e) {
+      if (gen === loadMoreGen) error.value = String(e)
+    } finally {
+      if (gen === loadMoreGen) loadingMore.value = false
+    }
   }
 
   async function setHidden(names: string[]) {
@@ -501,6 +589,7 @@ export const useWorkspace = defineStore('workspace', () => {
     page,
     pageById,
     loading,
+    loadingMore,
     error,
     sorts,
     filters,
@@ -511,6 +600,7 @@ export const useWorkspace = defineStore('workspace', () => {
     columnWidths,
     offset,
     pageSize,
+    scrollMode,
     sqlDraft,
     showSql,
     showReimport,
@@ -538,6 +628,8 @@ export const useWorkspace = defineStore('workspace', () => {
     setColumnWidths,
     setOffset,
     setPageSize,
+    setScrollMode,
+    loadMore,
     bindEvents,
   }
 })

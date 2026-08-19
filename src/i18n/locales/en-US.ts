@@ -50,6 +50,12 @@ export default {
   },
   status: {
     range: '{start}-{end} / {total}',
+    loaded: 'Loaded {n} / {total}',
+    pageMode: 'Pages',
+    infiniteMode: 'Infinite',
+    modeHint: 'Pages jump by batch. Infinite scroll keeps loading until the last row.',
+    chunk: 'Batch',
+    loadingMore: 'Loading more…',
     columns: '{n} columns',
     cancel: 'Cancel',
     partial: 'partial',

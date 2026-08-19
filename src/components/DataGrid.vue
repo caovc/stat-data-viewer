@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { computed, shallowRef, useTemplateRef } from 'vue'
+import { computed, shallowRef, useTemplateRef, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
-  FlexRender,
   createColumnHelper,
   getCoreRowModel,
   useVueTable,
@@ -14,6 +13,7 @@ import { storeToRefs } from 'pinia'
 import ColumnFilter from './ColumnFilter.vue'
 import ColumnHeaderTitle from './columns/ColumnHeaderTitle.vue'
 import ColumnResizeHandle from './ColumnResizeHandle.vue'
+import GridCellText from './GridCellText.vue'
 import { useWorkspace } from '../stores/workspace'
 import type { ColumnInfo, DistinctValue, FilterSpec, ValueLabel } from '../types'
 import { findCondition, hasColumnFilter, removeColumnConditions, upsertCondition } from '../utils/queryRules'
@@ -26,11 +26,12 @@ import {
   visiblePinned,
 } from '../utils/columnLayout'
 import { GRID_ROW_HEIGHT, virtualRowPads } from '../utils/virtualTable'
+import { LOAD_MORE_THRESHOLD, shouldFetchMore } from '../utils/infiniteScroll'
 
 const { t } = useI18n()
 const { token } = theme.useToken()
 const store = useWorkspace()
-const { page, metadata, metadataByTable, labelMode, headerMode, sorts, offset, hidden, pinnedStart, pinnedEnd, columnWidths, filters, dataTab } = storeToRefs(store)
+const { page, metadata, metadataByTable, labelMode, headerMode, sorts, offset, hidden, pinnedStart, pinnedEnd, columnWidths, filters, dataTab, scrollMode, loadingMore, error } = storeToRefs(store)
 
 const scroller = useTemplateRef<HTMLElement>('scroller')
 const filterCol = shallowRef<string | null>(null)
@@ -170,6 +171,12 @@ function pinStyle(name: string) {
   return pinStickyStyle(name, visiblePinnedStart.value, visiblePinnedEnd.value, sizeOf)
 }
 
+function displayOf(cell: { column: { columnDef: { cell?: unknown } }; getContext: () => unknown; getValue: () => unknown }) {
+  const render = cell.column.columnDef.cell
+  if (typeof render === 'function') return String(render(cell.getContext()) ?? '')
+  return String(cell.getValue() ?? '')
+}
+
 const table = useVueTable({
   get data() {
     return page.value?.rows ?? []
@@ -207,6 +214,22 @@ const virtualizer = useVirtualizer(
 const virtualPads = computed(() =>
   virtualRowPads(virtualizer.value.getVirtualItems(), virtualizer.value.getTotalSize()),
 )
+
+watchEffect(() => {
+  const current = page.value
+  if (!current) return
+  const last = virtualizer.value.getVirtualItems().at(-1)
+  if (!shouldFetchMore({
+    mode: scrollMode.value,
+    loaded: current.rows.length,
+    total: current.totalRows,
+    lastVisibleIndex: last?.index ?? null,
+    threshold: LOAD_MORE_THRESHOLD,
+    busy: loadingMore.value,
+    error: Boolean(error.value),
+  })) return
+  void store.loadMore()
+})
 
 const sortByName = computed(() => {
   const map = new Map<string, { index: number; desc: boolean; total: number }>()
@@ -399,10 +422,7 @@ function onFilterOpen(column: string, open: boolean) {
                 ]"
                 :style="pinStyle(cell.column.id)"
               >
-                <FlexRender
-                  :render="cell.column.columnDef.cell"
-                  :props="cell.getContext()"
-                />
+                <GridCellText :text="displayOf(cell)" />
               </td>
             </tr>
             <tr v-if="virtualPads.bottom > 0" class="virtual-pad" aria-hidden="true">
@@ -580,7 +600,8 @@ function onFilterOpen(column: string, open: boolean) {
 }
 
 .grid-table th :deep(.header-title),
-.grid-table th :deep(.ant-tooltip-disabled-compatible-wrapper) {
+.grid-table th :deep(.ant-tooltip-disabled-compatible-wrapper),
+.grid-table td :deep(.ant-tooltip-disabled-compatible-wrapper) {
   min-width: 0;
   max-width: 100%;
 }

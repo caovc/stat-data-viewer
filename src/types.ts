@@ -2,6 +2,8 @@ export type LabelMode = 'value' | 'label' | 'both'
 export type HeaderMode = 'name' | 'label' | 'both'
 export type TabKind = 'data' | 'sql'
 export type ColumnPin = 'start' | 'end' | null
+export const SCROLL_MODES = ['page', 'infinite'] as const
+export type ScrollMode = (typeof SCROLL_MODES)[number]
 
 export interface ColumnSetting {
   name: string
@@ -134,6 +136,7 @@ export interface TabView {
   columnWidths: Record<string, number>
   offset: number
   pageSize: number
+  scrollMode: ScrollMode
 }
 
 export interface DataTab {

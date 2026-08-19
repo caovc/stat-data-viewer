@@ -50,6 +50,12 @@ export default {
   },
   status: {
     range: '{start}-{end} / {total}',
+    loaded: '已加载 {n} / {total}',
+    pageMode: '分页',
+    infiniteMode: '无限滚动',
+    modeHint: '分页按页翻看；无限滚动会持续加载直到末尾',
+    chunk: '每批',
+    loadingMore: '继续加载…',
     columns: '{n} 列',
     cancel: '取消',
     partial: '部分导入',
