@@ -122,6 +122,7 @@ export default {
   grid: {
     empty: 'Open a dataset or run SQL to populate the grid.',
     noRows: 'No rows.',
+    loading: 'Loading…',
   },
   filter: {
     contains: 'contains',

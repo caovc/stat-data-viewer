@@ -122,6 +122,7 @@ export default {
   grid: {
     empty: '打开数据集或运行 SQL 以填充表格。',
     noRows: '无数据行。',
+    loading: '加载中…',
   },
   filter: {
     contains: '包含',

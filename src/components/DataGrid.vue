@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, shallowRef, useTemplateRef, watchEffect } from 'vue'
+import { computed, shallowRef, useTemplateRef, watch, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   createColumnHelper,
@@ -8,7 +8,7 @@ import {
 } from '@tanstack/vue-table'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { CaretDownOutlined, CaretUpOutlined, FilterOutlined } from '@antdv-next/icons'
-import { Empty, Flex, Popover, theme } from 'antdv-next'
+import { Empty, Flex, Popover, Spin, theme } from 'antdv-next'
 import { storeToRefs } from 'pinia'
 import ColumnFilter from './ColumnFilter.vue'
 import ColumnHeaderTitle from './columns/ColumnHeaderTitle.vue'
@@ -25,13 +25,13 @@ import {
   pinStickyStyle,
   visiblePinned,
 } from '../utils/columnLayout'
-import { GRID_ROW_HEIGHT, virtualRowPads } from '../utils/virtualTable'
+import { GRID_ROW_HEIGHT, virtualRowPads, virtualWindowUncovered } from '../utils/virtualTable'
 import { LOAD_MORE_THRESHOLD, shouldFetchMore } from '../utils/infiniteScroll'
 
 const { t } = useI18n()
 const { token } = theme.useToken()
 const store = useWorkspace()
-const { page, metadata, metadataByTable, labelMode, headerMode, sorts, offset, hidden, pinnedStart, pinnedEnd, columnWidths, filters, dataTab, scrollMode, loadingMore, error } = storeToRefs(store)
+const { page, metadata, metadataByTable, labelMode, headerMode, sorts, offset, hidden, pinnedStart, pinnedEnd, columnWidths, filters, dataTab, scrollMode, loading, loadingMore, error } = storeToRefs(store)
 
 const scroller = useTemplateRef<HTMLElement>('scroller')
 const filterCol = shallowRef<string | null>(null)
@@ -207,13 +207,49 @@ const virtualizer = useVirtualizer(
     count: table.getRowModel().rows.length,
     getScrollElement: () => scroller.value,
     estimateSize: () => GRID_ROW_HEIGHT,
-    overscan: 12,
+    overscan: 36,
   })),
 )
 
-const virtualPads = computed(() =>
-  virtualRowPads(virtualizer.value.getVirtualItems(), virtualizer.value.getTotalSize()),
+const paintedItems = shallowRef(virtualizer.value.getVirtualItems())
+const headerSize = computed(() => (headerMode.value === 'both' ? 44 : GRID_ROW_HEIGHT))
+
+watch(
+  () => virtualizer.value.getVirtualItems(),
+  (items) => {
+    if (items.length > 0) paintedItems.value = items
+  },
+  { immediate: true },
 )
+
+watch(
+  () => offset.value,
+  () => {
+    paintedItems.value = []
+  },
+)
+
+const virtualItems = computed(() => {
+  const items = virtualizer.value.getVirtualItems()
+  return items.length > 0 ? items : paintedItems.value
+})
+
+const virtualPads = computed(() =>
+  virtualRowPads(virtualItems.value, virtualizer.value.getTotalSize()),
+)
+
+const showGridLoading = computed(() => {
+  if (loading.value) return true
+  if (!(page.value?.rows.length)) return false
+  const instance = virtualizer.value
+  return virtualWindowUncovered({
+    items: instance.getVirtualItems(),
+    scrollOffset: instance.scrollOffset ?? 0,
+    viewportSize: instance.scrollRect?.height ?? 0,
+    headerSize: headerSize.value,
+    totalSize: instance.getTotalSize(),
+  })
+})
 
 watchEffect(() => {
   const current = page.value
@@ -311,8 +347,8 @@ function onFilterOpen(column: string, open: boolean) {
     <Flex v-if="!page" class="grid-empty" align="center" justify="center">
       <Empty :description="t('grid.empty')" />
     </Flex>
+    <template v-else>
     <div
-      v-else
       ref="scroller"
       class="grid-scroll"
       :class="{ resizing: Boolean(resizingId), stacked: headerMode === 'both' }"
@@ -408,7 +444,7 @@ function onFilterOpen(column: string, open: boolean) {
               </td>
             </tr>
             <tr
-              v-for="vrow in virtualizer.getVirtualItems()"
+              v-for="vrow in virtualItems"
               :key="vrow.index"
               :class="{ even: vrow.index % 2 === 1 }"
               :style="{ height: `${vrow.size}px` }"
@@ -434,6 +470,10 @@ function onFilterOpen(column: string, open: boolean) {
         </tbody>
       </table>
     </div>
+    <div v-show="showGridLoading" class="grid-loading" aria-live="polite">
+      <Spin spinning :description="t('grid.loading')" />
+    </div>
+    </template>
   </div>
 </template>
 
@@ -447,6 +487,7 @@ function onFilterOpen(column: string, open: boolean) {
 }
 
 .grid-host {
+  position: relative;
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -456,10 +497,22 @@ function onFilterOpen(column: string, open: boolean) {
 }
 
 .grid-scroll {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow: auto;
   overflow-anchor: none;
+}
+
+.grid-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background: color-mix(in srgb, v-bind('token.colorBgContainer') 62%, transparent);
 }
 
 .grid-scroll.resizing {
