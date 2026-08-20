@@ -44,6 +44,10 @@ export function cancelImport(jobId: string) {
   return invoke<void>('cancel_import', { jobId })
 }
 
+export function dropDataset(table: string) {
+  return invoke<void>('drop_dataset', { table })
+}
+
 export function queryPage(args: {
   table: string
   offset: number

@@ -28,6 +28,7 @@ pub fn run() {
             commands::open_dataset,
             commands::reimport,
             commands::cancel_import,
+            commands::drop_dataset,
             commands::query_page_cmd,
             commands::run_sql,
             commands::export,

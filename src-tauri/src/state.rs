@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -107,26 +107,29 @@ impl Session {
         self.clone_conn()
     }
 
-    pub fn unique_table_name(&self, base: &str) -> String {
-        let tables = self.tables.lock().unwrap();
-        if !tables.contains_key(base) {
-            return base.to_string();
-        }
-        for i in 2..10_000 {
-            let name = format!("{base}_{i}");
-            if !tables.contains_key(&name) {
-                return name;
-            }
-        }
-        format!("{base}_{}", uuid::Uuid::new_v4().simple())
-    }
-
-    pub fn find_reuse(&self, path: &str, mtime_ms: i64) -> Option<TableReg> {
-        let tables = self.tables.lock().unwrap();
-        tables
+    /// Atomically reuse an already-imported (or reserved) table, or occupy a unique name.
+    ///
+    /// Name allocation must happen before the import thread starts. Otherwise two
+    /// same-stem files opened together both receive `adsl` and overwrite each other.
+    pub fn reuse_or_reserve(
+        &self,
+        path: &str,
+        mtime_ms: i64,
+        base: &str,
+        make: impl FnOnce(String) -> TableReg,
+    ) -> (TableReg, bool) {
+        let mut tables = self.tables.lock().unwrap();
+        if let Some(existing) = tables
             .values()
-            .find(|t| t.source_path.to_string_lossy() == path && t.mtime_ms == mtime_ms)
+            .find(|t| same_source_path(&t.source_path, path) && t.mtime_ms == mtime_ms)
             .cloned()
+        {
+            return (existing, true);
+        }
+        let name = next_unique_name(&tables, base);
+        let reg = make(name.clone());
+        tables.insert(name, reg.clone());
+        (reg, false)
     }
 
     pub fn drop_table(&self, table: &str) -> Result<(), String> {
@@ -171,6 +174,32 @@ impl AppState {
             jobs: Mutex::new(HashMap::new()),
         })
     }
+
+    pub fn cancel_jobs_for_table(&self, table: &str) {
+        let jobs = self.jobs.lock().unwrap();
+        for job in jobs.values() {
+            if job.table_name == table {
+                job.cancel.store(true, Ordering::Relaxed);
+            }
+        }
+    }
+}
+
+fn next_unique_name(tables: &HashMap<String, TableReg>, base: &str) -> String {
+    if !tables.contains_key(base) {
+        return base.to_string();
+    }
+    for i in 2..10_000 {
+        let name = format!("{base}_{i}");
+        if !tables.contains_key(&name) {
+            return name;
+        }
+    }
+    format!("{base}_{}", uuid::Uuid::new_v4().simple())
+}
+
+fn same_source_path(stored: &Path, path: &str) -> bool {
+    stored == Path::new(path)
 }
 
 pub fn file_mtime_ms(path: &std::path::Path) -> i64 {
@@ -210,5 +239,75 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM ads", [], |r| r.get(0))
             .expect("count imported rows");
         assert_eq!(n, 3, "query connection must see imported rows");
+    }
+
+    fn placeholder(path: &str, table_name: String) -> TableReg {
+        TableReg {
+            table_name,
+            source_path: PathBuf::from(path),
+            mtime_ms: 1,
+            format: FileFormat::Sav,
+            encoding: None,
+            catalog_path: None,
+            import_complete: false,
+        }
+    }
+
+    #[test]
+    fn same_stem_files_reserve_distinct_table_names() {
+        let session = Session::new().expect("session");
+        let (a, reused_a) = session.reuse_or_reserve("/study/a/adsl.sav", 1, "adsl", |name| {
+            placeholder("/study/a/adsl.sav", name)
+        });
+        let (b, reused_b) = session.reuse_or_reserve("/study/b/adsl.sav", 1, "adsl", |name| {
+            placeholder("/study/b/adsl.sav", name)
+        });
+        assert!(!reused_a);
+        assert!(!reused_b);
+        assert_eq!(a.table_name, "adsl");
+        assert_eq!(b.table_name, "adsl_2");
+        assert_ne!(a.table_name, b.table_name);
+    }
+
+    #[test]
+    fn same_path_and_mtime_reuses_reserved_table() {
+        let session = Session::new().expect("session");
+        let (first, _) = session.reuse_or_reserve("/study/a/adsl.sav", 1, "adsl", |name| {
+            placeholder("/study/a/adsl.sav", name)
+        });
+        let (second, reused) = session.reuse_or_reserve("/study/a/adsl.sav", 1, "adsl", |name| {
+            placeholder("/study/a/adsl.sav", name)
+        });
+        assert!(reused);
+        assert_eq!(first.table_name, second.table_name);
+        assert_eq!(session.tables.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn drop_table_removes_data_and_registry() {
+        let session = Session::new().expect("session");
+        session.reuse_or_reserve("/tmp/ads.sav", 1, "ads", |name| placeholder("/tmp/ads.sav", name));
+        {
+            let conn = session.write_conn();
+            conn.execute_batch(
+                "CREATE TABLE ads (id INTEGER);
+                 INSERT INTO ads VALUES (1), (2), (3);
+                 INSERT INTO meta_datasets VALUES ('ads', '/tmp/ads.sav', 0, 'sav', NULL, NULL, NULL, NULL, 3, 1, NULL, true);
+                 INSERT INTO meta_variables VALUES ('ads', 0, 'id', NULL, 'int32', NULL, NULL, NULL, NULL, '[]', NULL);",
+            )
+            .expect("seed imported table");
+        }
+        session.drop_table("ads").expect("drop");
+        assert!(session.tables.lock().unwrap().is_empty());
+        let q = session.query_conn().expect("query conn");
+        assert!(
+            q.query_row("SELECT COUNT(*) FROM ads", [], |r| r.get::<_, i64>(0))
+                .is_err(),
+            "closed dataset must not remain queryable",
+        );
+        let meta_rows: i64 = q
+            .query_row("SELECT COUNT(*) FROM meta_datasets WHERE table_name = 'ads'", [], |r| r.get(0))
+            .expect("meta lookup");
+        assert_eq!(meta_rows, 0);
     }
 }

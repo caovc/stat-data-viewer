@@ -11,6 +11,7 @@ import { storeToRefs } from 'pinia'
 import LocaleSwitch from './header/LocaleSwitch.vue'
 import ThemeSwitch from './header/ThemeSwitch.vue'
 import { useWorkspaceActions } from '../composables/useWorkspaceActions'
+import { preloadSqlEditor } from '../sql/registerDuckdb'
 
 const { t } = useI18n()
 const { token } = theme.useToken()
@@ -30,6 +31,12 @@ const labelOptions = computed(() => [
 ])
 
 const hasValueLabels = computed(() => (metadata.value?.valueLabels.length ?? 0) > 0)
+
+function toggleSql() {
+  const next = !store.showSql
+  if (next) preloadSqlEditor()
+  store.showSql = next
+}
 </script>
 
 <template>
@@ -57,7 +64,7 @@ const hasValueLabels = computed(() => (metadata.value?.valueLabels.length ?? 0) 
         <template #icon><FolderOpenOutlined /></template>
         {{ t('header.open') }}
       </Button>
-      <Button :type="showSql ? 'primary' : 'default'" @click="store.showSql = !store.showSql">
+      <Button :type="showSql ? 'primary' : 'default'" @click="toggleSql">
         <template #icon><CodeOutlined /></template>
         {{ t('header.sql') }}
       </Button>

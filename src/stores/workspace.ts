@@ -29,6 +29,7 @@ import {
   nextPinList,
 } from '../utils/columnLayout'
 import { emptyFilterGroup, pruneFilterGroup, pruneFiltersToColumns } from '../utils/queryRules'
+import { fileNameFromPath, findDataTabByPath, omitTableMeta, releasedDataTableName } from '../utils/workspaceTabs'
 
 let unlisten: UnlistenFn | null = null
 let idSeq = 1
@@ -62,6 +63,7 @@ export const useWorkspace = defineStore('workspace', () => {
   const error = ref<string | null>(null)
   let loadMoreGen = 0
   const fallbackSql = ref('SELECT * FROM ')
+  const editorSql = ref('SELECT * FROM ')
   const showSql = ref(false)
   const showReimport = ref(false)
   const showExport = ref(false)
@@ -72,7 +74,19 @@ export const useWorkspace = defineStore('workspace', () => {
 
   const active = computed(() => tabs.value.find((t) => t.id === activeId.value) ?? null)
   const dataTab = computed(() => (active.value?.kind === 'data' ? active.value : null))
-  const sqlCatalog = computed(() => buildSqlCatalog(tabs.value, metadataByTable.value))
+  const sqlCatalog = computed(() =>
+    buildSqlCatalog(
+      tabs.value
+        .filter((tab): tab is DataTab => tab.kind === 'data')
+        .map((tab) => ({
+          kind: 'data' as const,
+          tableName: tab.tableName,
+          title: tab.title,
+          path: tab.path,
+        })),
+      metadataByTable.value,
+    ),
+  )
   const page = computed(() => (activeId.value ? pageById.value[activeId.value] ?? null : null))
   const metadata = computed(() => {
     const tab = dataTab.value
@@ -140,12 +154,21 @@ export const useWorkspace = defineStore('workspace', () => {
     },
   })
   const sqlDraft = computed({
-    get: () => (active.value?.kind === 'sql' ? active.value.sql : fallbackSql.value),
+    get: () => editorSql.value,
     set: (next) => {
-      if (active.value?.kind === 'sql') active.value.sql = next
-      else fallbackSql.value = next
+      editorSql.value = next
     },
   })
+
+  function persistEditorSql() {
+    const tab = tabs.value.find((item) => item.id === activeId.value)
+    if (tab?.kind === 'sql') tab.sql = editorSql.value
+    else fallbackSql.value = editorSql.value
+  }
+
+  function loadEditorSql(tab: WorkspaceTab | null) {
+    editorSql.value = tab?.kind === 'sql' ? tab.sql : fallbackSql.value
+  }
 
   function rememberMeta(meta: DatasetMeta) {
     metadataByTable.value = { ...metadataByTable.value, [meta.tableName]: meta }
@@ -159,17 +182,26 @@ export const useWorkspace = defineStore('workspace', () => {
   }
 
   function addTab(tab: WorkspaceTab) {
+    persistEditorSql()
     tabs.value.push(tab)
     activeId.value = tab.id
+    loadEditorSql(tab)
   }
 
   async function activate(id: string) {
-    if (activeId.value !== id) {
-      showReimport.value = false
-      showExport.value = false
+    if (activeId.value === id) {
+      const tab = tabs.value.find((t) => t.id === id)
+      if (tab?.kind !== 'data') return
+      if (!shouldFetchOnActivate(pageById.value[id])) return
+      await refresh()
+      return
     }
+    persistEditorSql()
+    showReimport.value = false
+    showExport.value = false
     activeId.value = id
-    const tab = tabs.value.find((t) => t.id === id)
+    const tab = tabs.value.find((t) => t.id === id) ?? null
+    loadEditorSql(tab)
     if (tab?.kind !== 'data') {
       showQuery.value = false
       showVariables.value = false
@@ -179,25 +211,41 @@ export const useWorkspace = defineStore('workspace', () => {
     await refresh()
   }
 
-  function closeTab(id: string) {
+  function forgetTableMeta(tableName: string) {
+    metadataByTable.value = omitTableMeta(metadataByTable.value, tableName)
+  }
+
+  async function closeTab(id: string) {
+    persistEditorSql()
     const idx = tabs.value.findIndex((t) => t.id === id)
     if (idx < 0) return
+    const closed = tabs.value[idx]
+    const released = releasedDataTableName(closed, tabs.value.filter((_, i) => i !== idx))
     const wasActive = activeId.value === id
     tabs.value.splice(idx, 1)
+    if (released) forgetTableMeta(released)
     if (wasActive) {
       showReimport.value = false
       showExport.value = false
       const next = tabs.value[idx] ?? tabs.value[idx - 1] ?? null
       activeId.value = next?.id ?? null
+      loadEditorSql(next)
       if (!next) {
         showColumns.value = false
         showQuery.value = false
         showVariables.value = false
-      } else {
-        void activate(next.id)
+      } else if (next.kind === 'data' && shouldFetchOnActivate(pageById.value[next.id])) {
+        void refresh()
+      } else if (next.kind !== 'data') {
+        showQuery.value = false
+        showVariables.value = false
       }
     }
     setPage(id, null)
+    if (!released) return
+    void api.dropDataset(released).catch((e) => {
+      error.value = String(e)
+    })
   }
 
   async function openPath(path: string, extra?: { encoding?: string; format?: string; catalogPath?: string }) {
@@ -207,9 +255,16 @@ export const useWorkspace = defineStore('workspace', () => {
     }
     error.value = null
     const result = await api.openDataset({ path, ...extra })
-    const title = path.split(/[\\/]/).pop() ?? result.tableName
-    const existing = tabs.value.find((t) => t.kind === 'data' && t.tableName === result.tableName)
+    const title = fileNameFromPath(path, result.tableName)
+    const existing = findDataTabByPath(tabs.value, path)
     if (existing) {
+      existing.tableName = result.tableName
+      existing.jobId = result.jobId
+      existing.importing = !result.reused && !result.importComplete
+      existing.progress = result.reused ? 1 : existing.progress
+      existing.error = null
+      existing.title = title
+      existing.path = path
       activeId.value = existing.id
     } else {
       addTab({
@@ -325,6 +380,7 @@ export const useWorkspace = defineStore('workspace', () => {
     loading.value = true
     error.value = null
     try {
+      persistEditorSql()
       const current = active.value
       const tab = current?.kind === 'sql'
         ? current

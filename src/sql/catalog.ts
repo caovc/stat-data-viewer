@@ -13,6 +13,7 @@ export interface SqlColumn {
 export interface SqlTable {
   name: string
   title: string
+  path: string | null
   fileLabel: string | null
   rowCount: number | null
   varCount: number | null
@@ -57,21 +58,25 @@ export function quoteIdent(name: string): string {
 }
 
 export function buildSqlCatalog(
-  tabs: WorkspaceTab[],
+  tabs: Array<Pick<WorkspaceTab, 'kind'> & { tableName?: string; title?: string; path?: string }>,
   metadataByTable: Record<string, DatasetMeta>,
 ): SqlCatalog {
   const seen = new Set<string>()
   const tables: SqlTable[] = []
 
   for (const tab of tabs) {
-    if (tab.kind !== 'data') continue
-    seen.add(tab.tableName.toLowerCase())
-    tables.push(toSqlTable(tab.tableName, tab.title, metadataByTable[tab.tableName]))
-  }
-
-  for (const [name, meta] of Object.entries(metadataByTable)) {
-    if (seen.has(name.toLowerCase())) continue
-    tables.push(toSqlTable(name, name, meta))
+    if (tab.kind !== 'data' || !tab.tableName) continue
+    const key = tab.tableName.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    tables.push(
+      toSqlTable(
+        tab.tableName,
+        tab.title ?? tab.tableName,
+        tab.path ?? null,
+        metadataByTable[tab.tableName],
+      ),
+    )
   }
 
   return { tables }
@@ -110,10 +115,11 @@ export function parseTableAliases(sql: string): Map<string, string> {
   return aliases
 }
 
-function toSqlTable(name: string, title: string, meta?: DatasetMeta): SqlTable {
+function toSqlTable(name: string, title: string, path: string | null, meta?: DatasetMeta): SqlTable {
   return {
     name,
     title,
+    path: path || meta?.sourcePath || null,
     fileLabel: meta?.fileLabel ?? null,
     rowCount: meta?.rowCount ?? null,
     varCount: meta?.varCount ?? meta?.variables.length ?? null,

@@ -6,6 +6,7 @@ import { storeToRefs } from 'pinia'
 import { DATA_FILTERS, takePendingOpenPaths } from '../api'
 import { newSqlTab, useWorkspace } from '../stores/workspace'
 import { consumePendingOpenPaths } from '../utils/associatedFiles'
+import { preloadSqlEditor } from '../sql/registerDuckdb'
 
 let opening = false
 
@@ -53,6 +54,7 @@ export function useWorkspaceActions() {
   }
 
   function addSql() {
+    preloadSqlEditor()
     store.addTab(newSqlTab())
     store.showSql = true
   }

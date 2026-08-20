@@ -35,15 +35,26 @@ export function ensureDuckdbLanguage(): void {
     ],
     colors: {
       'editor.background': '#ffffff',
+      'editor.foreground': '#0f172a',
       'editor.lineHighlightBackground': '#f4f6f8',
       'editorLineNumber.foreground': '#94a3b8',
       'editorLineNumber.activeForeground': '#0f766e',
       'editorCursor.foreground': '#0f766e',
       'editor.selectionBackground': '#0f766e33',
       'editorWidget.background': '#ffffff',
+      'editorWidget.foreground': '#0f172a',
+      'editorWidget.border': '#d0d5dd',
       'editorSuggestWidget.background': '#ffffff',
+      'editorSuggestWidget.foreground': '#0f172a',
+      'editorSuggestWidget.border': '#d0d5dd',
       'editorSuggestWidget.selectedBackground': '#ccfbf1',
+      'editorSuggestWidget.selectedForeground': '#134e4a',
+      'editorSuggestWidget.highlightForeground': '#0f766e',
+      'editorSuggestWidget.focusHighlightForeground': '#0f766e',
       'editorHoverWidget.background': '#ffffff',
+      'editorHoverWidget.foreground': '#0f172a',
+      'editorHoverWidget.border': '#d0d5dd',
+      'editorHoverWidget.statusBarBackground': '#f4f6f8',
     },
   })
   monaco.editor.defineTheme('stat-data-sql-dark', {
@@ -62,18 +73,33 @@ export function ensureDuckdbLanguage(): void {
     ],
     colors: {
       'editor.background': '#171c22',
+      'editor.foreground': '#e2e8f0',
       'editor.lineHighlightBackground': '#1d232b',
       'editorLineNumber.foreground': '#64748b',
       'editorLineNumber.activeForeground': '#5eead4',
       'editorCursor.foreground': '#5eead4',
       'editor.selectionBackground': '#0f766e55',
       'editorWidget.background': '#1d232b',
+      'editorWidget.foreground': '#e2e8f0',
+      'editorWidget.border': '#3f4a57',
       'editorSuggestWidget.background': '#1d232b',
-      'editorSuggestWidget.selectedBackground': '#134e4a',
+      'editorSuggestWidget.foreground': '#e2e8f0',
+      'editorSuggestWidget.border': '#3f4a57',
+      'editorSuggestWidget.selectedBackground': '#115e59',
+      'editorSuggestWidget.selectedForeground': '#f0fdfa',
+      'editorSuggestWidget.highlightForeground': '#5eead4',
+      'editorSuggestWidget.focusHighlightForeground': '#5eead4',
       'editorHoverWidget.background': '#1d232b',
+      'editorHoverWidget.foreground': '#e2e8f0',
+      'editorHoverWidget.border': '#3f4a57',
+      'editorHoverWidget.statusBarBackground': '#171c22',
     },
   })
   languageReady = true
+}
+
+export function preloadSqlEditor(): void {
+  ensureDuckdbLanguage()
 }
 
 export function bindDuckdbIntellisense(getCatalog: CatalogGetter): void {

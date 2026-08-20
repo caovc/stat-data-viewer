@@ -205,8 +205,27 @@ pub fn import_dataset(
         return Err(readstat::Error::CatalogIsNotDataset.to_string());
     }
 
-    let table = table.unwrap_or_else(|| state.session.unique_table_name(&sanitize_table_name(&src)));
     let mtime_ms = file_mtime_ms(&src);
+    let table = match table {
+        Some(name) => name,
+        None => {
+            let (reg, _) = state.session.reuse_or_reserve(
+                &path,
+                mtime_ms,
+                &sanitize_table_name(&src),
+                |table_name| TableReg {
+                    table_name,
+                    source_path: src.clone(),
+                    mtime_ms,
+                    format: resolved,
+                    encoding: encoding.clone(),
+                    catalog_path: catalog_path.as_ref().map(std::path::PathBuf::from),
+                    import_complete: false,
+                },
+            );
+            reg.table_name
+        }
+    };
 
     state.tables_insert(TableReg {
         table_name: table.clone(),
@@ -259,6 +278,18 @@ pub fn import_dataset(
     };
 
     let parsed = parse_file(&src, opts, hooks, &mut sink);
+    let still_open = state
+        .session
+        .tables
+        .lock()
+        .map(|tables| tables.contains_key(&table))
+        .unwrap_or(false);
+    if !still_open {
+        drop(sink);
+        drop(conn);
+        let _ = state.session.drop_table(&table);
+        return Ok(table);
+    }
     let complete = !cancel.load(Ordering::Relaxed) && parsed.is_ok();
     let rows = sink.rows as i64;
     let preview_sent = sink.preview_sent;

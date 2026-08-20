@@ -73,21 +73,33 @@ fn parse_format(name: Option<&str>) -> Result<Option<FileFormat>, String> {
 
 #[tauri::command]
 pub fn open_dataset(app: AppHandle, state: State<AppState>, args: OpenArgs) -> Result<OpenResult, String> {
-    let mtime = file_mtime_ms(std::path::Path::new(&args.path));
-    if let Some(existing) = state.session.find_reuse(&args.path, mtime) {
+    let format = parse_format(args.format.as_deref())?;
+    let src = std::path::PathBuf::from(&args.path);
+    let mtime = file_mtime_ms(&src);
+    let base = readstat::sanitize_table_name(&src);
+    let (reserved, reused) = state.session.reuse_or_reserve(&args.path, mtime, &base, |table_name| {
+        crate::state::TableReg {
+            table_name,
+            source_path: src.clone(),
+            mtime_ms: mtime,
+            format: format.unwrap_or_else(|| {
+                FileFormat::from_path(&src).unwrap_or(FileFormat::Sas7bdat)
+            }),
+            encoding: args.encoding.clone(),
+            catalog_path: args.catalog_path.as_ref().map(std::path::PathBuf::from),
+            import_complete: false,
+        }
+    });
+    if reused {
         return Ok(OpenResult {
             job_id: String::new(),
-            table_name: existing.table_name,
+            table_name: reserved.table_name,
             reused: true,
-            import_complete: existing.import_complete,
+            import_complete: reserved.import_complete,
         });
     }
 
-    let format = parse_format(args.format.as_deref())?;
-    let src = std::path::PathBuf::from(&args.path);
-    let table = state
-        .session
-        .unique_table_name(&readstat::sanitize_table_name(&src));
+    let table = reserved.table_name;
     let job_id = uuid::Uuid::new_v4().to_string();
     let job_out = job_id.clone();
     let table_out = table.clone();
@@ -155,6 +167,12 @@ pub fn cancel_import(state: State<AppState>, job_id: String) -> Result<(), Strin
         job.cancel.store(true, Ordering::Relaxed);
     }
     Ok(())
+}
+
+#[tauri::command]
+pub fn drop_dataset(state: State<AppState>, table: String) -> Result<(), String> {
+    state.cancel_jobs_for_table(&table);
+    state.session.drop_table(&table)
 }
 
 #[tauri::command(rename = "query_page")]

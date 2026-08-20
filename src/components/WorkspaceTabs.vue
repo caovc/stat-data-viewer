@@ -11,15 +11,29 @@ const { token } = theme.useToken()
 const { store, openFiles, addSql } = useWorkspaceActions()
 const { tabs, activeId } = storeToRefs(store)
 
-const items = computed(() =>
+const tabHeads = computed(() =>
   tabs.value.map((tab) => ({
-    key: tab.id,
-    label: tab.kind === 'sql'
-      ? t(tab.title === 'SQL result' ? 'tabs.sqlResult' : 'tabs.sql')
-      : tab.title,
-    icon: h(tab.kind === 'sql' ? CodeOutlined : DatabaseOutlined),
-    closable: true,
+    id: tab.id,
+    kind: tab.kind,
+    title: tab.title,
+    path: tab.kind === 'data' ? tab.path : '',
   })),
+)
+
+const items = computed(() =>
+  tabHeads.value.map((tab) => {
+    const text = tab.kind === 'sql'
+      ? t(tab.title === 'SQL result' ? 'tabs.sqlResult' : 'tabs.sql')
+      : tab.title
+    return {
+      key: tab.id,
+      label: tab.kind === 'data'
+        ? h('span', { class: 'tab-file-name', title: tab.path }, text)
+        : text,
+      icon: h(tab.kind === 'sql' ? CodeOutlined : DatabaseOutlined),
+      closable: true,
+    }
+  }),
 )
 
 function onEdit(targetKey: string | MouseEvent | KeyboardEvent, action: 'add' | 'remove') {
@@ -27,7 +41,7 @@ function onEdit(targetKey: string | MouseEvent | KeyboardEvent, action: 'add' | 
     void openFiles()
     return
   }
-  if (typeof targetKey === 'string') store.closeTab(targetKey)
+  if (typeof targetKey === 'string') void store.closeTab(targetKey)
 }
 </script>
 
@@ -66,5 +80,14 @@ function onEdit(targetKey: string | MouseEvent | KeyboardEvent, action: 'add' | 
 
 .tabs-wrap :deep(.ant-tabs-nav::before) {
   border: 0;
+}
+
+.tabs-wrap :deep(.tab-file-name) {
+  display: inline-block;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
 }
 </style>

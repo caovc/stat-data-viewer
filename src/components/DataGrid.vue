@@ -42,7 +42,13 @@ const labels = computed(() => {
   const map = new Map<string, string>()
   const sources = metadata.value
     ? [metadata.value]
-    : Object.values(metadataByTable.value)
+    : (() => {
+        const origins = new Set(
+          (page.value?.columns ?? []).map((col) => col.origin).filter(Boolean),
+        )
+        if (origins.size === 0) return []
+        return Object.values(metadataByTable.value).filter((meta) => origins.has(meta.tableName))
+      })()
   for (const meta of sources) {
     for (const item of meta.valueLabels as ValueLabel[]) {
       if (item.numValue != null) map.set(`${item.labelSet}#n#${item.numValue}`, item.label)
