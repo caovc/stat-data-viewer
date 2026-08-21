@@ -6,7 +6,10 @@ const host = process.env.TAURI_DEV_HOST
 export default defineConfig({
   plugins: [vue()],
   optimizeDeps: {
-    include: ['monaco-editor'],
+    include: [
+      'monaco-editor/editor/editor.api.js',
+      'monaco-editor/internal/common/workers.js',
+    ],
   },
   worker: {
     format: 'es',
